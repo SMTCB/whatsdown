@@ -1,0 +1,25 @@
+# Copy this file into the TARGET repository as .github/workflows/whatsdown-checks.yml.
+# WhatsDown pushes each proposed fix to a throwaway branch named whatsdown/*; this workflow
+# runs the project's own checks there. Adjust the commands to the project.
+name: WhatsDown checks
+
+on:
+  push:
+    branches: ["whatsdown/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test --if-present
+      - run: npm run lint --if-present
+      - run: npm run build --if-present

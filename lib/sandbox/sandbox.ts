@@ -24,7 +24,7 @@ export interface Sandbox {
   reset(): Promise<void>;
 }
 
-function lineCounts(text: string): Map<string, number> {
+export function lineCounts(text: string): Map<string, number> {
   const m = new Map<string, number>();
   if (text === "") return m;
   for (const line of text.split("\n")) m.set(line, (m.get(line) ?? 0) + 1);
@@ -32,7 +32,7 @@ function lineCounts(text: string): Map<string, number> {
 }
 
 /** Counts lines in `next` that are not in `prev` (multiset difference). */
-function surplus(next: Map<string, number>, prev: Map<string, number>): string[] {
+export function surplus(next: Map<string, number>, prev: Map<string, number>): string[] {
   const out: string[] = [];
   for (const [line, n] of next) {
     const extra = n - (prev.get(line) ?? 0);

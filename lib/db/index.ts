@@ -8,6 +8,7 @@ import { RuleScreener } from "@/lib/guard/screen";
 import { MemoryUsageLog } from "@/lib/llm/client";
 import { groqFromEnv } from "@/lib/llm/groq";
 import { GitHubCodeSource } from "@/lib/code/source";
+import { GitHubActionsSandbox } from "@/lib/sandbox/github-actions";
 import { liveNodes } from "@/lib/pipeline/live-nodes";
 import type { PipelineDeps } from "@/lib/pipeline/runner";
 
@@ -15,7 +16,7 @@ import type { PipelineDeps } from "@/lib/pipeline/runner";
 export function getPipeline(): PipelineDeps {
   const groq = groqFromEnv();
   if (!groq) return { store: getStore(), nodes: demoNodes, screener: new RuleScreener() };
-  return { store: getStore(), nodes: liveNodes({ store: getStore(), client: groq, log: getUsageLog(), budgetUsd: TICKET_BUDGET_USD, code: getCodeSource() }), screener: new GroqScreener(groq) };
+  return { store: getStore(), nodes: liveNodes({ store: getStore(), client: groq, log: getUsageLog(), budgetUsd: TICKET_BUDGET_USD, code: getCodeSource(), sandbox: getSandbox() }), screener: new GroqScreener(groq) };
 }
 
 /** Target repository for the demo project; becomes a project-registry row once Supabase exists. */
@@ -27,11 +28,21 @@ function getCodeSource() {
   return globalForStore.__whatsdownCode;
 }
 
+/** Cloud sandbox on GitHub Actions; only when the GitHub App is configured. One per process. */
+function getSandbox() {
+  const appId = process.env.GITHUB_APP_ID?.trim();
+  const installationId = process.env.GITHUB_INSTALLATION_ID?.trim();
+  const privateKey = process.env.GITHUB_APP_PRIVATE_KEY?.trim();
+  if (!appId || !installationId || !privateKey) return undefined;
+  globalForStore.__whatsdownSandbox ??= new GitHubActionsSandbox(DEMO_REPO, { appId, installationId, privateKey }, getCodeSource());
+  return globalForStore.__whatsdownSandbox;
+}
+
 export const DEMO_PROJECT_ID = "forza-fantasy-league";
 /** USD allowed per ticket before the agents stop. */
 export const TICKET_BUDGET_USD = 1.5;
 
-const globalForStore = globalThis as unknown as { __whatsdownStore?: TicketStore; __whatsdownUsage?: MemoryUsageLog; __whatsdownFiles?: AttachmentStore; __whatsdownCode?: GitHubCodeSource };
+const globalForStore = globalThis as unknown as { __whatsdownStore?: TicketStore; __whatsdownUsage?: MemoryUsageLog; __whatsdownFiles?: AttachmentStore; __whatsdownCode?: GitHubCodeSource; __whatsdownSandbox?: GitHubActionsSandbox };
 
 /** Uploaded documents; in memory until Supabase Storage exists. */
 export function getAttachments(): AttachmentStore {
