@@ -16,7 +16,7 @@ import type { PipelineDeps } from "@/lib/pipeline/runner";
 export function getPipeline(): PipelineDeps {
   const groq = groqFromEnv();
   if (!groq) return { store: getStore(), nodes: demoNodes, screener: new RuleScreener() };
-  return { store: getStore(), nodes: liveNodes({ store: getStore(), client: groq, log: getUsageLog(), budgetUsd: TICKET_BUDGET_USD, code: getCodeSource(), sandbox: getSandbox() }), screener: new GroqScreener(groq) };
+  return { store: getStore(), nodes: liveNodes({ store: getStore(), client: groq, log: getUsageLog(), budgetUsd: TICKET_BUDGET_USD, code: getCodeSource(), sandbox: getSandbox(), publisher: getSandbox() }), screener: new GroqScreener(groq) };
 }
 
 /** Target repository for the demo project; becomes a project-registry row once Supabase exists. */

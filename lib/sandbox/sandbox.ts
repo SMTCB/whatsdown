@@ -22,6 +22,20 @@ export interface Sandbox {
   runChecks(): Promise<CheckResult>;
   /** Discards all changes. */
   reset(): Promise<void>;
+  /** Branch holding the pushed patch, for sandboxes that publish one. */
+  readonly pushedBranch?: string;
+  /** Hands the pushed branch over to the owner: forgets it so a later reset() leaves it alone. */
+  keep?(): void;
+}
+
+export type MergeOutcome = { merged: true; url: string } | { merged: false; reason: string; url?: string };
+
+/** Turns an approved patch into a change on the project. Only called after the owner approves Gate 2. */
+export interface Publisher {
+  /** Opens a pull request for the branch and merges it. */
+  merge(branch: string, title: string, body: string): Promise<MergeOutcome>;
+  /** Deletes the branch without merging. */
+  discard(branch: string): Promise<void>;
 }
 
 export function lineCounts(text: string): Map<string, number> {

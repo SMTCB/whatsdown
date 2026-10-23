@@ -9,7 +9,7 @@ import type { Ticket, TicketStore } from "@/lib/db/store";
 import type { GuardPolicy } from "@/lib/guard/diff-guard";
 import type { LlmClient, MemoryUsageLog, TaskContext } from "@/lib/llm/client";
 import type { Overrides } from "@/lib/llm/router";
-import type { Sandbox } from "@/lib/sandbox/sandbox";
+import type { Publisher, Sandbox } from "@/lib/sandbox/sandbox";
 import type { PipelineNodes } from "./runner";
 
 export interface AgentNodeDeps {
@@ -22,6 +22,8 @@ export interface AgentNodeDeps {
   overrides?: Overrides;
   /** The target repository, read-only. Without it Diagnose and Developer work from the report alone. */
   code?: CodeSource;
+  /** Lands approved branches on the project; without it the pipeline cannot merge. */
+  publisher?: Publisher;
   /** Delivers a message to the reporter (web page, WhatsApp). Defaults to doing nothing. */
   send?: (ticket: Ticket, message: string) => Promise<void>;
 }
@@ -89,7 +91,23 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
 
     async qa(ticket) {
       const r = await qa(ctxFor(ticket), ticket, deps.sandbox);
-      return { passed: r.passed, summary: r.summary };
+      // Passing branches are handed to the owner (Gate 2); keep them out of the next ticket's reset.
+      const branch = r.passed ? deps.sandbox.pushedBranch : undefined;
+      if (branch) deps.sandbox.keep?.();
+      return { passed: r.passed, summary: r.summary, ...(branch ? { branch } : {}) };
+    },
+
+    async merge(ticket, branch) {
+      if (!deps.publisher) return { merged: false, reason: "No merge access is configured." };
+      const plan = (await latest(ticket, (e) => (typeof e.payload.plan === "string" ? e.payload.plan : undefined))) ?? "";
+      const body = `Proposed by WhatsDown for ticket #${ticket.number} and approved by the owner.
+
+${plan}`.slice(0, 4000);
+      return deps.publisher.merge(branch, `WhatsDown #${ticket.number}: ${ticket.title}`.slice(0, 120), body);
+    },
+
+    async discard(_ticket, branch) {
+      await deps.publisher?.discard(branch);
     },
 
     async notify(ticket) {

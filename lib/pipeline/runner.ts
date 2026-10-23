@@ -3,6 +3,7 @@ import type { Ticket, TicketStore } from "@/lib/db/store";
 import { transition } from "@/lib/db/transition";
 import type { TriageResult } from "@/lib/agents/triage";
 import { findDuplicate } from "@/lib/domain/duplicates";
+import type { MergeOutcome } from "@/lib/sandbox/sandbox";
 import type { ScreenResult, Screener } from "@/lib/guard/screen";
 
 /**
@@ -13,7 +14,11 @@ export interface PipelineNodes {
   triage(ticket: Ticket): Promise<TriageResult>;
   diagnose(ticket: Ticket): Promise<{ plan: string; files?: string[] }>;
   develop(ticket: Ticket): Promise<{ ok: boolean; summary: string }>;
-  qa(ticket: Ticket): Promise<{ passed: boolean; summary: string }>;
+  qa(ticket: Ticket): Promise<{ passed: boolean; summary: string; branch?: string }>;
+  /** Lands the QA-approved branch on the project. Only called from resolveGate2 after the owner approves. */
+  merge?(ticket: Ticket, branch: string): Promise<MergeOutcome>;
+  /** Throws the branch away when the owner closes the ticket without merging. */
+  discard?(ticket: Ticket, branch: string): Promise<void>;
   notify(ticket: Ticket): Promise<void>;
 }
 
@@ -83,7 +88,7 @@ export async function advance(deps: PipelineDeps, ticketId: string): Promise<Tic
         case "in_qa": {
           const r = await nodes.qa(ticket);
           if (r.passed) {
-            await transition(store, ticketId, "awaiting_merge", "agent", "qa passed", { summary: r.summary });
+            await transition(store, ticketId, "awaiting_merge", "agent", "qa passed", { summary: r.summary, ...(r.branch ? { branch: r.branch } : {}) });
           } else {
             const failures = (await store.events(ticketId)).filter((e) => e.fromStatus === "in_qa" && e.toStatus === "patching").length;
             if (failures >= maxQaRetries) await transition(store, ticketId, "failed", "agent", "qa failed too many times", { summary: r.summary });
@@ -134,4 +139,39 @@ export async function decideGate2(store: TicketStore, ticketId: string, decision
   if (!t) throw new Error(`Ticket ${ticketId} not found`);
   if (t.status !== "awaiting_merge") throw new WrongGateError("awaiting_merge", t.status);
   return transition(store, ticketId, GATE2_TARGET[decision], "owner", `gate 2: ${decision}`, { gate: 2, decision, note });
+}
+
+/** The owner approved the merge but the project would not take it (e.g. branch protection). The ticket stays at Gate 2. */
+export class MergeBlockedError extends Error {
+  constructor(
+    readonly reason: string,
+    readonly url?: string,
+  ) {
+    super(reason);
+    this.name = "MergeBlockedError";
+  }
+}
+
+/**
+ * Gate 2 with side effects: "merge" lands the branch before the ticket moves to merged, "close"
+ * throws the branch away. Without publishing nodes (demo mode) it only records the decision.
+ */
+export async function resolveGate2(deps: PipelineDeps, ticketId: string, decision: Gate2Decision, note?: string): Promise<Ticket> {
+  const { store, nodes } = deps;
+  const t = await store.get(ticketId);
+  if (!t) throw new Error(`Ticket ${ticketId} not found`);
+  if (t.status !== "awaiting_merge") throw new WrongGateError("awaiting_merge", t.status);
+  const events = await store.events(ticketId);
+  const branch = [...events].reverse().map((e) => e.payload.branch).find((b): b is string => typeof b === "string");
+  const extra: Record<string, unknown> = {};
+  if (branch) {
+    if (decision === "merge" && nodes.merge) {
+      const out = await nodes.merge(t, branch);
+      if (!out.merged) throw new MergeBlockedError(out.reason, out.url);
+      extra.pullRequest = out.url;
+    } else if (decision === "close" && nodes.discard) {
+      await nodes.discard(t, branch);
+    }
+  }
+  return transition(store, ticketId, GATE2_TARGET[decision], "owner", `gate 2: ${decision}`, { gate: 2, decision, note, branch, ...extra });
 }

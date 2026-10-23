@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getAttachments, getPipeline, getStore } from "@/lib/db";
 import { formatSize } from "@/lib/attachments/rules";
-import { advance, decideGate1, decideGate2, type Gate1Decision, type Gate2Decision } from "@/lib/pipeline/runner";
+import { advance, decideGate1, MergeBlockedError, resolveGate2, type Gate1Decision, type Gate2Decision } from "@/lib/pipeline/runner";
 
 export const dynamic = "force-dynamic";
 
@@ -25,16 +26,23 @@ async function gate2(decision: Gate2Decision, formData: FormData) {
   "use server";
   const id = String(formData.get("id"));
   if (!GATE2.includes(decision)) throw new Error("Invalid decision");
-  await decideGate2(getStore(), id, decision);
-  await advance(getPipeline(), id);
+  const pipeline = getPipeline();
+  try {
+    await resolveGate2(pipeline, id, decision);
+  } catch (err) {
+    if (!(err instanceof MergeBlockedError)) throw err;
+    redirect(`/tickets/${id}?blocked=${encodeURIComponent(err.reason)}${err.url ? `&pr=${encodeURIComponent(err.url)}` : ""}`);
+  }
+  await advance(pipeline, id);
   revalidatePath(`/tickets/${id}`);
   revalidatePath("/tickets");
 }
 
 const h2 = "mb-2 font-[family-name:var(--font-heading)] text-lg font-semibold";
 
-export default async function TicketPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TicketPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ blocked?: string; pr?: string }> }) {
   const { id } = await params;
+  const { blocked, pr } = await searchParams;
   const store = getStore();
   const ticket = await store.get(id);
   if (!ticket) notFound();
@@ -139,6 +147,17 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
         <section className="card border-[var(--accent)] border-2">
           <h2 className={h2}>Gate 2: merge?</h2>
           <p className="hint mb-3">QA passed. Merging applies the change to the project.</p>
+          {blocked && (
+            <p role="alert" className="mb-3 text-[0.9375rem]">
+              The merge did not go through: {blocked.slice(0, 300)}
+              {pr && pr.startsWith("https://github.com/") && (
+                <>
+                  {" "}
+                  <a className="underline" href={pr}>Open the pull request</a>
+                </>
+              )}
+            </p>
+          )}
           <form className="flex flex-wrap gap-2">
             <input type="hidden" name="id" value={ticket.id} />
             <button formAction={gate2.bind(null, "merge")} className="btn btn-primary">Merge</button>

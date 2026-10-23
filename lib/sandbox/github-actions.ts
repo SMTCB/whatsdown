@@ -1,7 +1,7 @@
 import { createSign } from "node:crypto";
 import type { CodeSource, RepoRef } from "@/lib/code/source";
 import type { ChangedFile } from "@/lib/guard/diff-guard";
-import { lineCounts, surplus, type CheckResult, type FileChange, type Sandbox } from "./sandbox";
+import { lineCounts, surplus, type CheckResult, type FileChange, type MergeOutcome, type Publisher, type Sandbox } from "./sandbox";
 
 type Init = { method?: string; headers?: Record<string, string>; body?: string };
 type FetchLike = (url: string, init?: Init) => Promise<Pick<Response, "ok" | "status" | "json" | "text">>;
@@ -74,7 +74,7 @@ interface Run {
  * merging stays a separate, owner-approved step. The target repo needs a workflow that runs on
  * pushes to `whatsdown/**` (see docs/target-repo-workflow.yml).
  */
-export class GitHubActionsSandbox implements Sandbox {
+export class GitHubActionsSandbox implements Sandbox, Publisher {
   private staged = new Map<string, string>();
   private branch?: string;
   private readonly auth: GitHubAppAuth;
@@ -133,6 +133,52 @@ export class GitHubActionsSandbox implements Sandbox {
     const branch = this.branch;
     this.branch = undefined;
     await this.call("DELETE", `/git/refs/heads/${branch}`, undefined, [404, 422]);
+  }
+
+  keep(): void {
+    this.staged.clear();
+    this.branch = undefined;
+  }
+
+  async merge(branch: string, title: string, body: string): Promise<MergeOutcome> {
+    const opened = await this.raw("POST", "/pulls", { title, head: branch, base: this.target.ref, body });
+    let pr = opened.data as { number?: number; html_url?: string };
+    if (opened.status === 422) {
+      // A pull request for this branch may already be open (e.g. an earlier blocked merge).
+      const found = (await this.raw("GET", `/pulls?head=${encodeURIComponent(`${this.target.owner}:${branch}`)}&state=open`)).data;
+      pr = (Array.isArray(found) ? found[0] : undefined) ?? {};
+    } else if (opened.status >= 300) {
+      return { merged: false, reason: `GitHub would not open a pull request (status ${opened.status}).` };
+    }
+    if (!pr.number) return { merged: false, reason: "GitHub would not open a pull request for this branch." };
+    const url = pr.html_url ?? "";
+    const done = await this.raw("PUT", `/pulls/${pr.number}/merge`, { merge_method: "squash", commit_title: title });
+    if (done.status >= 300) {
+      const why = (done.data as { message?: string }).message ?? `status ${done.status}`;
+      return { merged: false, reason: `GitHub refused the merge: ${why.slice(0, 200)}`, url };
+    }
+    await this.discard(branch);
+    return { merged: true, url };
+  }
+
+  async discard(branch: string): Promise<void> {
+    await this.call("DELETE", `/git/refs/heads/${branch}`, undefined, [404, 422]);
+  }
+
+  /** Like call(), but returns the status and body instead of throwing on errors. */
+  private async raw(method: string, path: string, body?: unknown): Promise<{ status: number; data: unknown }> {
+    const res = await this.fetchFn(`${API}/repos/${this.target.owner}/${this.target.repo}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${await this.auth.token()}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "whatsdown",
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+    return { status: res.status, data };
   }
 
   private async call(method: string, path: string, body?: unknown, tolerated: number[] = []): Promise<unknown> {
