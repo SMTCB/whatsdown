@@ -3,12 +3,18 @@ import { MemoryStore } from "./memory-store";
 import type { TicketStore } from "./store";
 
 import { demoNodes } from "@/lib/pipeline/demo-nodes";
+import { GroqScreener } from "@/lib/guard/groq-screener";
 import { RuleScreener } from "@/lib/guard/screen";
 import { MemoryUsageLog } from "@/lib/llm/client";
+import { groqFromEnv } from "@/lib/llm/groq";
+import { liveNodes } from "@/lib/pipeline/live-nodes";
 import type { PipelineDeps } from "@/lib/pipeline/runner";
 
+/** Uses Groq for screening and triage when GROQ_API_KEY is set; otherwise the local stand-ins. */
 export function getPipeline(): PipelineDeps {
-  return { store: getStore(), nodes: demoNodes, screener: new RuleScreener() };
+  const groq = groqFromEnv();
+  if (!groq) return { store: getStore(), nodes: demoNodes, screener: new RuleScreener() };
+  return { store: getStore(), nodes: liveNodes(groq, getUsageLog(), TICKET_BUDGET_USD), screener: new GroqScreener(groq) };
 }
 
 export const DEMO_PROJECT_ID = "forza-fantasy-league";

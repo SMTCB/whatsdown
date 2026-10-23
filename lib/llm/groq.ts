@@ -34,10 +34,8 @@ export class GroqClient implements LlmClient {
     if (MODELS[req.model].provider !== "groq") throw new Error(`GroqClient cannot serve ${req.model}`);
     const body: Record<string, unknown> = {
       model: req.model,
-      messages: [
-        { role: "system", content: req.system },
-        { role: "user", content: req.prompt },
-      ],
+      // Prompt Guard rejects a system message; an empty system string means "none".
+      messages: [...(req.system ? [{ role: "system", content: req.system }] : []), { role: "user", content: req.prompt }],
     };
     if (req.model.startsWith("openai/gpt-oss") && req.effort) body.reasoning_effort = req.effort;
 
