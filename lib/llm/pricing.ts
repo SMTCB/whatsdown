@@ -18,6 +18,7 @@ export const MODELS = {
   "claude-haiku-5-5": { provider: "anthropic", model: "claude-haiku-5-5", inputPerM: 0.1, outputPerM: 0.5, cacheReadFactor: 0.1 },
   "openai/gpt-oss-20b": { provider: "groq", model: "openai/gpt-oss-20b", inputPerM: 0, outputPerM: 0, cacheReadFactor: 1 },
   "openai/gpt-oss-120b": { provider: "groq", model: "openai/gpt-oss-120b", inputPerM: 0, outputPerM: 0, cacheReadFactor: 1 },
+  "qwen/qwen3.8-27b": { provider: "groq", model: "qwen/qwen3.8-27b", inputPerM: 0, outputPerM: 0, cacheReadFactor: 1 },
   "meta-llama/llama-prompt-guard-2-86m": { provider: "groq", model: "meta-llama/llama-prompt-guard-2-86m", inputPerM: 0, outputPerM: 0, cacheReadFactor: 1 },
   "whisper-large-v3-turbo": { provider: "groq", model: "whisper-large-v3-turbo", inputPerM: 0, outputPerM: 0, cacheReadFactor: 1 },
 } as const satisfies Record<string, ModelInfo>;

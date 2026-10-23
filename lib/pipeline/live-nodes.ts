@@ -18,8 +18,6 @@ export function liveNodes(client: LlmClient, log: MemoryUsageLog, budgetUsd: num
           ticketId: ticket.id,
           spentUsd: log.totalFor(ticket.id),
           budgetUsd,
-          // Only Groq is connected, so there is no Claude fallback to switch to yet.
-          overrides: { triage: { fallback: undefined } },
         },
         ticket,
       ),

@@ -26,6 +26,6 @@ describe("communicate", () => {
     const client = new FakeLlmClient([reply("  Thanks, it is fixed!  ")]);
     const msg = await communicate({ ...base, client, log: new MemoryUsageLog() }, { number: 4, title: "Bug" }, "merged");
     expect(msg).toBe("Thanks, it is fixed!");
-    expect(client.requests[0]?.model).toBe("openai/gpt-oss-120b");
+    expect(client.requests[0]?.model).toBe("openai/gpt-oss-20b");
   });
 });

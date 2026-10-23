@@ -27,16 +27,17 @@ describe("runTask", () => {
     expect(client.requests[0]?.model).toBe("openai/gpt-oss-20b");
   });
 
-  it("falls back to Haiku on a rate limit", async () => {
+  it("falls back to the larger model on a rate limit", async () => {
     const client = new FakeLlmClient([new RateLimitError(), reply("ok", { inputTokens: 1_000_000, outputTokens: 0 })]);
     const res = await runTask(ctx(client), "triage", "sys", "hi");
-    expect(res.model).toBe("claude-haiku-5-5");
-    expect(res.costUsd).toBeCloseTo(0.1);
+    expect(res.model).toBe("openai/gpt-oss-120b");
+    expect(res.costUsd).toBe(0);
   });
 
   it("rethrows when there is no fallback left", async () => {
     const client = new FakeLlmClient([new RateLimitError()]);
-    await expect(runTask(ctx(client), "diagnose", "s", "p")).rejects.toBeInstanceOf(RateLimitError);
+    const c = { ...ctx(client), overrides: { triage: { fallback: undefined } } };
+    await expect(runTask(c, "triage", "s", "p")).rejects.toBeInstanceOf(RateLimitError);
   });
 
   it("does not swallow other errors", async () => {
