@@ -4,6 +4,7 @@ export type Task =
   | "screen"
   | "transcribe"
   | "triage"
+  | "locate"
   | "diagnose"
   | "develop"
   | "qa_summary"
@@ -25,10 +26,11 @@ export const GROQ_ROUTES: Record<Task, Route> = {
   screen: { primary: "meta-llama/llama-prompt-guard-2-86m" },
   transcribe: { primary: "whisper-large-v3-turbo" },
   triage: { primary: "openai/gpt-oss-20b", fallback: "openai/gpt-oss-120b", effort: "low" },
+  locate: { primary: "openai/gpt-oss-20b", fallback: "openai/gpt-oss-120b", effort: "medium" },
   qa_summary: { primary: "openai/gpt-oss-20b", fallback: "openai/gpt-oss-120b", effort: "low" },
   communicate: { primary: "openai/gpt-oss-20b", fallback: "openai/gpt-oss-120b", effort: "medium" },
-  diagnose: { primary: "openai/gpt-oss-120b", fallback: "qwen/qwen3.8-27b", effort: "high" },
-  develop: { primary: "openai/gpt-oss-120b", fallback: "qwen/qwen3.8-27b", effort: "high" },
+  diagnose: { primary: "openai/gpt-oss-120b", fallback: "openai/gpt-oss-20b", effort: "high" },
+  develop: { primary: "openai/gpt-oss-120b", fallback: "openai/gpt-oss-20b", effort: "high" },
 };
 
 /** Upgrade preset for once an Anthropic key exists: Claude for the two hard tasks. */

@@ -1,3 +1,5 @@
+import { locate } from "@/lib/code/locate";
+import type { CodeSource } from "@/lib/code/source";
 import { communicate } from "@/lib/agents/communicator";
 import { develop } from "@/lib/agents/develop";
 import { diagnose } from "@/lib/agents/diagnose";
@@ -18,6 +20,8 @@ export interface AgentNodeDeps {
   policy: GuardPolicy;
   budgetUsd: number;
   overrides?: Overrides;
+  /** The target repository, read-only. Without it Diagnose and Developer work from the report alone. */
+  code?: CodeSource;
   /** Delivers a message to the reporter (web page, WhatsApp). Defaults to doing nothing. */
   send?: (ticket: Ticket, message: string) => Promise<void>;
 }
@@ -51,8 +55,12 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
         e.payload.gate === 1 && e.payload.decision === "revise" && typeof e.payload.note === "string" ? e.payload.note : undefined,
       );
       const t = triaged?.type && triaged.severity && triaged.area ? { type: triaged.type, severity: triaged.severity, area: triaged.area } : undefined;
-      const r = await diagnose(ctxFor(ticket), ticket, t, note);
-      return { plan: `${r.plan}\n\nLikely files: ${r.suspectedFiles.join(", ") || "unknown"}\nRisk: ${r.risk}` };
+      const code = deps.code ? await locate(ctxFor(ticket), deps.code, ticket, t) : undefined;
+      const r = await diagnose(ctxFor(ticket), ticket, t, note, code);
+      return {
+        plan: `${r.plan}\n\nLikely files: ${r.suspectedFiles.join(", ") || "unknown"}\nRisk: ${r.risk}`,
+        files: code?.files.map((f) => f.path),
+      };
     },
 
     async develop(ticket) {
@@ -60,7 +68,13 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
       const feedback = await latest(ticket, (e) =>
         e.fromStatus === "in_qa" && e.toStatus === "patching" && typeof e.payload.summary === "string" ? e.payload.summary : undefined,
       );
-      const r = await develop(ctxFor(ticket), ticket, plan, deps.sandbox, deps.policy, feedback);
+      const paths = (await latest(ticket, (e) => (Array.isArray(e.payload.files) ? (e.payload.files as string[]) : undefined))) ?? [];
+      const original = [];
+      for (const path of paths) {
+        const content = deps.code ? await deps.code.read(path) : null;
+        if (content !== null) original.push({ path, content });
+      }
+      const r = await develop(ctxFor(ticket), ticket, plan, deps.sandbox, deps.policy, feedback, original);
       return { ok: r.ok, summary: r.summary };
     },
 

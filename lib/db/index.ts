@@ -7,6 +7,7 @@ import { GroqScreener } from "@/lib/guard/groq-screener";
 import { RuleScreener } from "@/lib/guard/screen";
 import { MemoryUsageLog } from "@/lib/llm/client";
 import { groqFromEnv } from "@/lib/llm/groq";
+import { GitHubCodeSource } from "@/lib/code/source";
 import { liveNodes } from "@/lib/pipeline/live-nodes";
 import type { PipelineDeps } from "@/lib/pipeline/runner";
 
@@ -14,14 +15,23 @@ import type { PipelineDeps } from "@/lib/pipeline/runner";
 export function getPipeline(): PipelineDeps {
   const groq = groqFromEnv();
   if (!groq) return { store: getStore(), nodes: demoNodes, screener: new RuleScreener() };
-  return { store: getStore(), nodes: liveNodes(groq, getUsageLog(), TICKET_BUDGET_USD), screener: new GroqScreener(groq) };
+  return { store: getStore(), nodes: liveNodes({ store: getStore(), client: groq, log: getUsageLog(), budgetUsd: TICKET_BUDGET_USD, code: getCodeSource() }), screener: new GroqScreener(groq) };
+}
+
+/** Target repository for the demo project; becomes a project-registry row once Supabase exists. */
+export const DEMO_REPO = { owner: "SMTCB", repo: "WCFantasyFootball", ref: "main" };
+
+/** One reader per process so the repository file list stays cached between requests. */
+function getCodeSource() {
+  globalForStore.__whatsdownCode ??= new GitHubCodeSource(DEMO_REPO, process.env.GITHUB_READ_TOKEN?.trim() || undefined);
+  return globalForStore.__whatsdownCode;
 }
 
 export const DEMO_PROJECT_ID = "forza-fantasy-league";
 /** USD allowed per ticket before the agents stop. */
 export const TICKET_BUDGET_USD = 1.5;
 
-const globalForStore = globalThis as unknown as { __whatsdownStore?: TicketStore; __whatsdownUsage?: MemoryUsageLog; __whatsdownFiles?: AttachmentStore };
+const globalForStore = globalThis as unknown as { __whatsdownStore?: TicketStore; __whatsdownUsage?: MemoryUsageLog; __whatsdownFiles?: AttachmentStore; __whatsdownCode?: GitHubCodeSource };
 
 /** Uploaded documents; in memory until Supabase Storage exists. */
 export function getAttachments(): AttachmentStore {

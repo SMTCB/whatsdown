@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { GroqScreener } from "@/lib/guard/groq-screener";
 import { FakeLlmClient, MemoryUsageLog, RateLimitError, reply } from "@/lib/llm/client";
+import { MemoryCodeSource } from "@/lib/code/source";
+import { MemoryStore } from "@/lib/db/memory-store";
 import { liveNodes } from "@/lib/pipeline/live-nodes";
 
 describe("GroqScreener", () => {
@@ -45,7 +47,7 @@ describe("liveNodes", () => {
     const out = { type: "bug", severity: "high", area: "scores", needsInfo: false };
     const client = new FakeLlmClient([reply(JSON.stringify(out))]);
     const log = new MemoryUsageLog();
-    const nodes = liveNodes(client, log, 1.5);
+    const nodes = liveNodes({ store: new MemoryStore(), client, log, budgetUsd: 1.5, code: new MemoryCodeSource({}) });
     const result = await nodes.triage({ id: "t1", title: "Score stuck", body: "Stays at zero" } as never);
     expect(result).toMatchObject({ type: "bug", severity: "high" });
     expect(log.records).toHaveLength(1);

@@ -11,7 +11,7 @@ import type { ScreenResult, Screener } from "@/lib/guard/screen";
  */
 export interface PipelineNodes {
   triage(ticket: Ticket): Promise<TriageResult>;
-  diagnose(ticket: Ticket): Promise<{ plan: string }>;
+  diagnose(ticket: Ticket): Promise<{ plan: string; files?: string[] }>;
   develop(ticket: Ticket): Promise<{ ok: boolean; summary: string }>;
   qa(ticket: Ticket): Promise<{ passed: boolean; summary: string }>;
   notify(ticket: Ticket): Promise<void>;
@@ -70,8 +70,8 @@ export async function advance(deps: PipelineDeps, ticketId: string): Promise<Tic
           await transition(store, ticketId, "diagnosing", "agent", "diagnosis started");
           break;
         case "diagnosing": {
-          const { plan } = await nodes.diagnose(ticket);
-          await transition(store, ticketId, "awaiting_plan_approval", "agent", "plan ready", { plan });
+          const { plan, files } = await nodes.diagnose(ticket);
+          await transition(store, ticketId, "awaiting_plan_approval", "agent", "plan ready", { plan, ...(files ? { files } : {}) });
           break;
         }
         case "patching": {
