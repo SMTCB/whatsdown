@@ -1,0 +1,317 @@
+<title>Maintenance Agents Approach</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: single reading column with a sticky section index on wide screens; tables and diagrams scroll inside their own boxes. */
+:root {
+  --bg: #f5f8f6;
+  --surface: #ffffff;
+  --fg: #14211a;
+  --muted: #55655c;
+  --line: #d6e0da;
+  --accent: #1c7a4b;
+  --accent-soft: #dff1e7;
+  --warn: #9a5b00;
+  --warn-soft: #fbefd5;
+  --bad: #a3322b;
+  --bad-soft: #f8e1de;
+  --code-bg: #eaf0ec;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1612; --surface: #15201a; --fg: #e3ece6; --muted: #98a9a0; --line: #2a3a31;
+    --accent: #4fc68a; --accent-soft: #17382a; --warn: #e6b04f; --warn-soft: #3a2f14;
+    --bad: #f08a80; --bad-soft: #3b1b18; --code-bg: #1b2a22; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1612; --surface: #15201a; --fg: #e3ece6; --muted: #98a9a0; --line: #2a3a31;
+  --accent: #4fc68a; --accent-soft: #17382a; --warn: #e6b04f; --warn-soft: #3a2f14;
+  --bad: #f08a80; --bad-soft: #3b1b18; --code-bg: #1b2a22; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 17px; line-height: 1.6;
+  padding-block: 32px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 48px; }
+nav.toc { position: sticky; top: calc(16px + env(safe-area-inset-top, 0px)); align-self: start; font-size: 14px; display: flex; flex-direction: column; gap: 2px; }
+nav.toc .label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+nav.toc a { color: var(--muted); text-decoration: none; padding: 4px 0 4px 10px; border-left: 2px solid var(--line); }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); border-left-color: var(--accent); outline: none; }
+main { min-width: 0; max-width: 760px; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(32px, 5vw, 46px); letter-spacing: -.02em; }
+h2 { font-size: 27px; letter-spacing: -.01em; margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); }
+h3 { font-size: 19px; margin-top: 28px; }
+p { margin: 12px 0; }
+.lede { font-size: 19px; color: var(--muted); margin-top: 16px; }
+.meta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); letter-spacing: .04em; margin-top: 14px; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+ul, ol { padding-left: 22px; } li { margin: 5px 0; }
+.scroll { overflow-x: auto; margin: 16px 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; min-width: 560px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-mono); font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--code-bg); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 600; }
+.pill { display: inline-block; font-family: var(--font-mono); font-size: 11px; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; font-weight: 600; }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 18px 0; }
+.callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+.callout p { margin: 6px 0; }
+.callout strong.t { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px; margin: 18px 0; overflow-x: auto; }
+.layers { display: grid; gap: 8px; }
+.layer { display: grid; grid-template-columns: 130px minmax(0,1fr); gap: 12px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); }
+.layer b { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.layer span { font-size: 15px; }
+.phase { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 16px 18px; margin: 14px 0; }
+.phase header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; justify-content: space-between; }
+.phase h3 { margin: 0; }
+.phase dl { display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 6px 14px; margin: 12px 0 0; font-size: 15px; }
+.phase dt { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
+.phase dd { margin: 0; }
+.q { counter-increment: q; display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.q::before { content: "Q" counter(q); font-family: var(--font-mono); font-weight: 600; color: var(--accent); font-size: 13px; padding-top: 3px; }
+.q p { margin: 0 0 4px; } .q .rec { color: var(--muted); font-size: 15px; }
+.qs { counter-reset: q; }
+button.theme { position: fixed; right: max(12px, env(safe-area-inset-right, 0px)); top: calc(12px + env(safe-area-inset-top, 0px)); font: 12px var(--font-mono); background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; cursor: pointer; z-index: 20; }
+button.theme:focus-visible { outline: 2px solid var(--accent); }
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0,1fr); gap: 0; } nav.toc { display: none; } .layer { grid-template-columns: minmax(0,1fr); gap: 2px; } .phase dl { grid-template-columns: minmax(0,1fr); } }
+</style>
+
+<button class="theme" id="theme-toggle" type="button" aria-label="Toggle light and dark theme">theme</button>
+<div class="wrap">
+<nav class="toc" aria-label="Sections">
+  <div class="label">Sections</div>
+  <a href="#summary">Summary</a><a href="#decisions">Decisions</a><a href="#architecture">Architecture</a><a href="#lifecycle">Ticket lifecycle</a>
+  <a href="#agents">Agents</a><a href="#models">Models and cost</a><a href="#data">Data model</a><a href="#safety">Safety</a>
+  <a href="#agnostic">Project-agnostic</a><a href="#phases">Build phases</a><a href="#eval">Measuring it</a><a href="#changes">Changes to blueprint</a><a href="#questions">Open questions</a>
+</nav>
+<main>
+
+<p class="meta">PROPOSED APPROACH · DRAFT 1 · FOR REVIEW</p>
+<h1>Maintenance agents, scoped for a hobby build</h1>
+<p class="lede">A ticketing app on Vercel and Supabase where a bug report goes through triage, diagnosis, a fix and a test run. You approve at two points. The first target is your fantasy sports league repo. The goal is to learn how well this works, so the plan builds in small stages and measures each one.</p>
+
+<h2 id="summary">Summary</h2>
+<ul>
+  <li><strong>One TypeScript repo.</strong> Next.js on Vercel for the form, ticket pages and your approval screen. LangGraph.js for the agent workflow. Supabase for data and login.</li>
+  <li><strong>You are the only approver.</strong> Approvals are buttons on the ticket page. The second gate is simply you merging the pull request on GitHub.</li>
+  <li><strong>Ship in stages.</strong> Phases 0 to 2 give you a working ticket tool with triage and a written diagnosis. Code changes and test runs come after you have seen the diagnosis quality.</li>
+  <li><strong>Free models first.</strong> Groq free tier as default, with one setting per agent so you can swap a single agent to a paid model when free quality becomes the bottleneck.</li>
+  <li><strong>Measure from the start.</strong> A set of planted bugs in your repo tells you the success rate, cost and time per phase.</li>
+</ul>
+
+<h2 id="decisions">Decisions</h2>
+<div class="scroll"><table>
+<thead><tr><th>Topic</th><th>Proposal</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Language</td><td><span class="pill">TypeScript</span></td><td>Vercel, Next.js, Supabase, E2B and LangGraph.js all treat it as first class. One language and one repo for the form, the API and the agents. Python would mean a second stack, and Python on Vercel is the weaker path.</td></tr>
+<tr><td>Orchestration</td><td><span class="pill">LangGraph.js</span></td><td>One graph per ticket. It saves its state to the database, so it can pause for your approval for days and resume. Retry loops are plain graph edges.</td></tr>
+<tr><td>Web app</td><td><span class="pill">Next.js on Vercel</span></td><td>Public ticket form, status page, your admin screen, webhook endpoints.</td></tr>
+<tr><td>Data and login</td><td><span class="pill">Supabase</span></td><td>Postgres for tickets and audit log, Supabase Auth for your login, the same database for LangGraph checkpoints.</td></tr>
+<tr><td>Long jobs</td><td><span class="pill warn">Inngest, to verify</span></td><td>Vercel functions have time limits and a diagnosis or patch can run longer. Inngest runs each graph step as a durable background job on its free tier. Fallback: a tiny always-on worker on Fly or Railway.</td></tr>
+<tr><td>Sandbox</td><td><span class="pill">E2B</span></td><td>TypeScript SDK made for agent code execution, simple API, free credits for hobby use. Modal is stronger for heavy compute, which you do not need. Introduced in phase 3 only.</td></tr>
+<tr><td>LLM access</td><td><span class="pill">Vercel AI SDK</span></td><td>One interface for Groq, Anthropic, Google and others. Each agent reads its model from config.</td></tr>
+<tr><td>Tracing</td><td><span class="pill">LangSmith (free)</span></td><td>Works with LangGraph out of the box. You see every prompt, tool call and token. Langfuse is the alternative if you prefer open source.</td></tr>
+<tr><td>Reporter channels</td><td><span class="pill">Web form, then WhatsApp</span></td><td>The form is the v1 channel. WhatsApp comes in phase 6 through the official Cloud API, not Evolution API (see Safety).</td></tr>
+<tr><td>QA</td><td><span class="pill">Run tests, then read CI</span></td><td>Your repo's own GitHub Actions run on the pull request. The QA step reads those results and re-runs tests in the sandbox. It does not need to invent a second test setup.</td></tr>
+</tbody></table></div>
+
+<h2 id="architecture">Architecture</h2>
+<div class="diagram"><div class="layers">
+  <div class="layer"><b>Channels</b><span>Web ticket form (public) · WhatsApp later · your admin screen (login required)</span></div>
+  <div class="layer"><b>Web app</b><span>Next.js on Vercel: form, ticket page, approve and reject buttons, GitHub webhook endpoint</span></div>
+  <div class="layer"><b>Job runner</b><span>Inngest: runs one graph step at a time with retries, so no step is limited by a web request timeout</span></div>
+  <div class="layer"><b>Workflow</b><span>LangGraph.js graph per ticket. Nodes: triage, diagnose, wait for approval, patch, QA, wait for merge, notify</span></div>
+  <div class="layer"><b>Tools</b><span>GitHub API (read files, search, branch, pull request, comments) · E2B sandbox (clone, edit, run tests)</span></div>
+  <div class="layer"><b>Data</b><span>Supabase Postgres: tickets, events, approvals, projects, LangGraph checkpoints, usage</span></div>
+  <div class="layer"><b>Models</b><span>Groq free models by default, per-agent override to any provider</span></div>
+</div></div>
+
+<h2 id="lifecycle">Ticket lifecycle</h2>
+<p>Each ticket is one LangGraph thread. The graph stops at three waiting points and resumes when the answer arrives.</p>
+<pre class="mermaid">
+flowchart TD
+  A[Form submitted] --> B[Triage agent]
+  B -->|duplicate| X[Link to existing ticket]
+  B -->|missing info| C[Ask reporter for details]
+  C --> B
+  B -->|out of scope| Y[Close with reason]
+  B -->|valid| D[Diagnosis agent]
+  D --> E{You approve the plan?}
+  E -->|reject with note| D
+  E -->|approve| F[Developer agent]
+  F --> G[QA step]
+  G -->|fail, retries left| F
+  G -->|fail, no retries| H[Escalate to you]
+  G -->|pass| I{You review and merge PR}
+  I -->|merged| J[Communicator agent]
+  J --> K[Closed]
+</pre>
+
+<h3>Ticket statuses</h3>
+<p><code>new</code> · <code>needs_info</code> · <code>duplicate</code> · <code>triaged</code> · <code>diagnosing</code> · <code>awaiting_plan_approval</code> · <code>patching</code> · <code>in_qa</code> · <code>awaiting_merge</code> · <code>merged</code> · <code>notified</code> · <code>closed</code> · <code>failed</code>. Every change writes one row to an event log, which gives you the audit trail for free.</p>
+
+<h3>The two approval gates</h3>
+<ul>
+  <li><strong>Gate 1, plan approval.</strong> You read the diagnosis on the ticket page and choose approve, reject with a note, or close. A rejection sends your note back to the diagnosis agent.</li>
+  <li><strong>Gate 2, merge.</strong> The agent opens a pull request with the QA result as a comment. You review and merge on GitHub. A GitHub webhook tells the app, and the ticket resumes. Until the webhook is built, a "mark merged" button does the same.</li>
+</ul>
+
+<h2 id="agents">Agents</h2>
+<p>Same five roles as the blueprint, with two corrections: QA is mostly deterministic code, and the developer works inside a sandbox so it can run the code it changes.</p>
+<div class="scroll"><table>
+<thead><tr><th>Agent</th><th>Job</th><th>Tools</th><th>Output</th><th>Limits</th></tr></thead>
+<tbody>
+<tr><td>Triage</td><td>Clean the report, extract fields, find duplicates, ask for missing details</td><td>Database search (text match first, embeddings later)</td><td>Typed ticket: severity, area, steps, expected vs actual</td><td>No technical advice. Output must pass a schema check.</td></tr>
+<tr><td>Diagnosis</td><td>Find the cause in the repo, list files to change, describe the fix and its risks</td><td>GitHub read and search. Logs later if you have a source.</td><td>Diagnosis document in Markdown, plus a list of target files</td><td>Read-only. Step and token budget.</td></tr>
+<tr><td>Developer</td><td>Edit the target files, write a test that reproduces the bug, open the pull request</td><td>E2B sandbox: file edit, shell, test runner</td><td>Branch and pull request</td><td>Only the approved files. The code checks the diff and rejects anything else.</td></tr>
+<tr><td>QA</td><td>Run the full test suite, read the CI result, summarize the outcome</td><td>E2B and GitHub checks. A small model only writes the summary.</td><td>Pass or fail, logs, a comment on the pull request</td><td>Two automatic retries, then it escalates to you.</td></tr>
+<tr><td>Communicator</td><td>Write a plain-language update for the reporter</td><td>Email now, WhatsApp later</td><td>Draft message</td><td>No paths, code or internal details. You approve drafts at first.</td></tr>
+</tbody></table></div>
+
+<h2 id="models">Models and cost</h2>
+<div class="callout warn"><strong class="t">Expectation</strong>
+<p>Groq's free tier has tight per-minute token limits, and the open models on it are weaker at multi-file code edits than the best paid models. Triage and communication will work well. Diagnosis will work on small repos. Patching is where you will most likely hit the ceiling. That is a useful result of the experiment, not a failure.</p></div>
+<ul>
+  <li>Models are configured by role, not by name: <code>triage</code>, <code>reasoning</code>, <code>coding</code>, <code>summary</code>. Changing a model is a settings change.</li>
+  <li>Each run has a hard budget: maximum steps, maximum tokens and maximum minutes. When a budget is hit the ticket stops and asks you.</li>
+  <li>Rate-limit handling: queue and retry with backoff, and an optional fallback model per role.</li>
+  <li>Suggested paid fallback for later: a small prepaid balance used only for the <code>coding</code> role, so the cost stays a few dollars.</li>
+  <li>Every model call is logged with tokens and cost, even when the cost is zero.</li>
+</ul>
+<p>Other running costs: Vercel Hobby, Supabase free, LangSmith free, Inngest free and E2B starter credits should cover a hobby workload. Free tiers change, so we verify limits when we build each phase. Supabase free projects pause after a period of inactivity, which is fine for this use but worth knowing.</p>
+
+<h2 id="data">Data model</h2>
+<div class="scroll"><table>
+<thead><tr><th>Table</th><th>Holds</th></tr></thead>
+<tbody>
+<tr><td><code>projects</code></td><td>Repo, default branch, language, install and test commands, notes for the agents, notification settings</td></tr>
+<tr><td><code>tickets</code></td><td>Project, reporter contact, status, severity, normalized report, duplicate link, current graph thread id</td></tr>
+<tr><td><code>ticket_events</code></td><td>Append-only log: who or what changed the ticket, when, and why</td></tr>
+<tr><td><code>artifacts</code></td><td>Diagnosis documents, pull request links, QA results, draft messages, by ticket and version</td></tr>
+<tr><td><code>approvals</code></td><td>Gate, decision, your note, timestamp</td></tr>
+<tr><td><code>llm_usage</code></td><td>Role, model, tokens, cost, duration, ticket</td></tr>
+<tr><td><code>checkpoints</code></td><td>LangGraph state, managed by its Postgres saver</td></tr>
+</tbody></table></div>
+
+<h2 id="safety">Safety</h2>
+<p>Ticket text is untrusted input and the agents hold repo access. The design limits what a bad ticket can do.</p>
+<ul>
+  <li><strong>Repo access.</strong> A GitHub fine-grained token limited to the chosen repos, with contents and pull request write only. Branch protection on <code>main</code> so nothing merges without you.</li>
+  <li><strong>Tokens stay outside the sandbox.</strong> The sandbox gets a short-lived read token to clone. The app, not the model, pushes the branch.</li>
+  <li><strong>Diff check in code.</strong> Changes to files outside the approved list, to dependencies, to CI files or to config fail the run automatically.</li>
+  <li><strong>Public form.</strong> Bot protection (Cloudflare Turnstile) and rate limiting. Agents treat the report as data and never as instructions.</li>
+  <li><strong>Sandbox.</strong> No production secrets, a time limit, and outbound network only for installing dependencies if needed.</li>
+  <li><strong>QA integrity.</strong> The developer cannot delete or weaken existing tests. A diff that does is flagged.</li>
+  <li><strong>Duplicates and retries.</strong> Webhooks and form submits carry an idempotency key, so a repeat does not start a second run.</li>
+  <li><strong>WhatsApp.</strong> Evolution API drives an unofficial WhatsApp Web session and can get the number banned. The official Cloud API is the safe option. It has a free test number for a few recipients, which is enough to learn.</li>
+</ul>
+
+<h2 id="agnostic">Keeping it project-agnostic</h2>
+<ul>
+  <li>Nothing about fantasy sports lives in the platform. Everything project-specific sits in a <code>projects</code> row.</li>
+  <li>Optional file in each target repo, for example <code>MAINTAINER.md</code>, with conventions, where tests live and known pitfalls. Agents read it first.</li>
+  <li>The ticket form takes a project from a dropdown, so adding a second app means adding a row, not changing code.</li>
+  <li>Test commands run from the project row. Language-specific logic lives only in the sandbox step.</li>
+</ul>
+
+<h2 id="phases">Build phases</h2>
+<p>Each phase ends in something that works, so you can stop at any point and still own a useful tool.</p>
+
+<div class="phase"><header><h3>Phase 0 · Foundations</h3><span class="pill">first</span></header>
+<dl><dt>Build</dt><dd>Next.js project, Supabase schema, login, projects table, model config, LangSmith tracing, deploy to Vercel.</dd>
+<dt>Done when</dt><dd>You can log in on the deployed site, add the fantasy repo as a project, and a test graph run appears in the trace tool.</dd>
+<dt>You learn</dt><dd>The deployment pipeline and how an agent run is traced.</dd></dl></div>
+
+<div class="phase"><header><h3>Phase 1 · Intake and triage</h3></header>
+<dl><dt>Build</dt><dd>Public form, ticket status page, triage agent with structured output, duplicate detection by text match, "needs info" loop, event log.</dd>
+<dt>Done when</dt><dd>A submitted bug becomes a clean ticket, a repeat is linked as a duplicate, and an incomplete report gets a request for details.</dd>
+<dt>You learn</dt><dd>Structured output, graph state and waiting for input.</dd></dl></div>
+
+<div class="phase"><header><h3>Phase 2 · Diagnosis and approval gate</h3><span class="pill warn">checkpoint</span></header>
+<dl><dt>Build</dt><dd>GitHub read tools, diagnosis agent, diagnosis document, approve and reject screen, step and token budgets.</dd>
+<dt>Done when</dt><dd>For a real bug, the diagnosis points to the right file and cause, and you can approve or send it back with a note.</dd>
+<dt>You learn</dt><dd>How good free models are at reading code. This is the main decision point: if diagnosis quality is poor, we adjust the model setup before building more.</dd></dl></div>
+
+<div class="phase"><header><h3>Phase 3 · Developer and sandbox</h3></header>
+<dl><dt>Build</dt><dd>E2B sandbox, clone and edit tools, developer agent, reproduction test, diff guard, branch and pull request creation.</dd>
+<dt>Done when</dt><dd>An approved diagnosis becomes a pull request that touches only the approved files.</dd>
+<dt>You learn</dt><dd>Sandboxes, agent code editing and its failure modes.</dd></dl></div>
+
+<div class="phase"><header><h3>Phase 4 · QA and retries</h3></header>
+<dl><dt>Build</dt><dd>Full test run, CI result reader, pull request comment, retry loop of two, escalation to you.</dd>
+<dt>Done when</dt><dd>A failing patch is retried with the test logs, and a persistent failure reaches you with a clear summary.</dd>
+<dt>You learn</dt><dd>Feedback loops between agents and where they stall.</dd></dl></div>
+
+<div class="phase"><header><h3>Phase 5 · Merge and communication</h3></header>
+<dl><dt>Build</dt><dd>GitHub merge webhook, communicator agent, email to the reporter through a draft you approve, ticket close.</dd>
+<dt>Done when</dt><dd>Merging a pull request closes the ticket and the reporter receives a plain-language update.</dd>
+<dt>You learn</dt><dd>Event-driven resume and webhook handling.</dd></dl></div>
+
+<div class="phase"><header><h3>Phase 6 · WhatsApp</h3><span class="pill">optional</span></header>
+<dl><dt>Build</dt><dd>Meta developer account, Cloud API test number, inbound webhook, replies in the same thread.</dd>
+<dt>Done when</dt><dd>A WhatsApp message creates a ticket and the update comes back to the same chat.</dd>
+<dt>You learn</dt><dd>Messaging platform rules such as message windows and templates. Most of the effort is account setup, not code.</dd></dl></div>
+
+<div class="phase"><header><h3>Phase 7 · Hardening and review</h3></header>
+<dl><dt>Build</dt><dd>Cost and budget dashboard, prompt tuning from evaluation results, second project onboarded.</dd>
+<dt>Done when</dt><dd>A second app runs through the same pipeline with only a new project row and notes.</dd>
+<dt>You learn</dt><dd>Whether the platform is really project-agnostic.</dd></dl></div>
+
+<h2 id="eval">Measuring how well it works</h2>
+<p>Your goal is to see how well this works. We build a small test set early: about ten bugs planted in a copy of your fantasy repo, from easy (wrong constant) to hard (logic across two files). After each phase we run the set and record:</p>
+<ul>
+  <li>Did the diagnosis name the right file and cause?</li>
+  <li>Did the patch fix the bug without breaking other tests?</li>
+  <li>How many tokens, how much time and how many retries did it take?</li>
+</ul>
+<p>The same set lets you compare Groq models, then a paid model, with real numbers.</p>
+
+<h2 id="changes">Changes to the original blueprint</h2>
+<div class="scroll"><table>
+<thead><tr><th>Blueprint</th><th>This approach</th></tr></thead>
+<tbody>
+<tr><td>CrewAI code, Python</td><td>LangGraph.js in TypeScript. The CrewAI snippets were illustrative and would not run as written.</td></tr>
+<tr><td><code>human_input=True</code> prompts</td><td>Approvals are database records with buttons in the web app, so they survive restarts and can wait for days.</td></tr>
+<tr><td>Straight line of five agents</td><td>A graph with loops: needs-info, plan rejection and the QA retry.</td></tr>
+<tr><td>QA as an LLM agent</td><td>QA is code that runs tests and reads CI. A small model only writes the summary.</td></tr>
+<tr><td>GitHub API writes one file</td><td>Developer works in a sandbox and the app pushes the resulting diff.</td></tr>
+<tr><td>AST index, vector search, Greptile</td><td>Skipped at the start. Repo search through GitHub or a clone is enough for hobby-size repos. Added only if diagnosis needs it.</td></tr>
+<tr><td>Evolution API for WhatsApp</td><td>Official WhatsApp Cloud API, later phase.</td></tr>
+<tr><td>Per-run prices of fractions of a cent</td><td>Real cost is per-ticket and tracked. With free models it is zero, with rate-limit delays instead.</td></tr>
+<tr><td>No security model</td><td>Token scope, diff guard, protected branch, bot protection.</td></tr>
+</tbody></table></div>
+
+<h2 id="questions">Open questions for you</h2>
+<div class="qs">
+<div class="q"><div><p>What is the fantasy app built with, and does it have automated tests or a GitHub Actions workflow?</p><p class="rec">This decides how reliable QA can be. If there are no tests, the developer agent writes the first reproduction test, which is harder.</p></div></div>
+<div class="q"><div><p>Is the repo private, and is the app already deployed on Vercel?</p><p class="rec">Private repos need the token setup in phase 0. A Vercel deployment lets us later report "fixed and live", not just "merged".</p></div></div>
+<div class="q"><div><p>Who submits tickets: your league members, or only you for now?</p><p class="rec">Members mean we need contact details (email) on the form and stricter spam protection. I assume email for updates.</p></div></div>
+<div class="q"><div><p>Are you open to a small prepaid balance (a few dollars) on a paid model for the coding role if free models fall short?</p><p class="rec">Recommended, but only after phase 2 results. Default stays free-only.</p></div></div>
+<div class="q"><div><p>Do you want me to send reporters the final message automatically, or always show you a draft first?</p><p class="rec">Draft first for the early phases, automatic later once you trust the wording.</p></div></div>
+<div class="q"><div><p>Do you want to use Inngest for long jobs, or would you rather run a small always-on worker?</p><p class="rec">Inngest is simpler and free. I will confirm Vercel's current time limits before phase 2 and only add it if needed.</p></div></div>
+<div class="q"><div><p>Do you have a name for the platform and a GitHub account or org where its own repo will live?</p><p class="rec">The folder is called WhatsDown. I will use that as a working name.</p></div></div>
+<div class="q"><div><p>Is the phase order right, in particular stopping to review after phase 2 before any code-writing agent is built?</p><p class="rec">Recommended, since diagnosis quality drives everything after it.</p></div></div>
+</div>
+
+<div class="callout"><strong class="t">Next step</strong>
+<p>Tell me what to change in the decisions or phases and answer the questions you can. Then I write the implementation plan: the repo layout, the database schema, and the task list for phases 0 to 2 in detail.</p></div>
+
+</main></div>
+<script>
+(function () {
+  var root = document.documentElement, btn = document.getElementById('theme-toggle');
+  btn.addEventListener('click', function () {
+    var dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    root.setAttribute('data-theme', dark ? 'light' : 'dark');
+  });
+})();
+</script>

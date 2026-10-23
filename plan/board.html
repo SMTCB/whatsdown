@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsDown Implementation Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@500;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 16px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font: 600 13.5px/1 var(--font-body); padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2); cursor: pointer; }
+  .chip:hover { border-color: var(--ink-3); }
+  .chip[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .search { flex: 1 1 200px; max-width: 280px; font: inherit; font-size: 15px; padding: 8px 12px; border: 1px solid var(--line-2); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); }
+  .reset { margin-left: auto; font: 600 13.5px var(--font-body); background: none; border: 0; color: var(--ink-3); cursor: pointer; text-decoration: underline; }
+  .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+
+  .board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(250px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 16px; align-items: start; }
+  .col { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; min-height: 200px; }
+  .col.drag-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
+  .col-head { display: flex; justify-content: space-between; align-items: center; padding: 4px 4px 10px; }
+  .col-head h2 { font-size: 15px; margin: 0; padding: 0; }
+  .col-count { font: 600 12px var(--font-mono); color: var(--ink-3); }
+  .cards { display: flex; flex-direction: column; gap: 8px; }
+  .kcard { text-align: left; width: 100%; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line-2); border-radius: var(--radius-sm); padding: 10px 12px; cursor: pointer; font: inherit; color: inherit; box-shadow: var(--shadow); }
+  .kcard:hover { border-color: var(--line-2); }
+  .kcard[data-type="spike"] { border-left-color: var(--violet); }
+  .kcard[data-type="story"] { border-left-color: var(--accent); }
+  .kcard[data-type="chore"] { border-left-color: var(--ink-3); }
+  .kcard[data-type="doc"] { border-left-color: var(--blue); }
+  .kcard[data-type="eval"] { border-left-color: var(--amber); }
+  .k-top { display: flex; justify-content: space-between; gap: 6px; font: 600 11.5px var(--font-mono); color: var(--ink-3); margin-bottom: 4px; }
+  .k-title { font-weight: 600; font-size: 14.5px; line-height: 1.35; }
+  .k-tags { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
+  .k-tags .tag { font-size: 11px; padding: 3px 7px; }
+  .empty { color: var(--ink-3); font-size: 13.5px; text-align: center; padding: 18px 6px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13.5px; color: var(--ink-2); margin: 8px 0 20px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+
+  dialog { border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); color: var(--ink); background: var(--surface); box-shadow: 0 20px 60px rgba(0,0,0,.18); }
+  dialog::backdrop { background: rgba(29,35,32,.35); }
+  .d-head { padding: 18px 20px 10px; border-bottom: 1px solid var(--line); }
+  .d-head h2 { margin: 6px 0 0; font-size: 21px; padding: 0; }
+  .d-body { padding: 14px 20px; overflow-y: auto; }
+  .d-foot { padding: 12px 20px 18px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--line); }
+  .d-foot label { font-weight: 600; font-size: 14px; }
+  .d-foot select { font: inherit; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); }
+  .btn { font: 600 14px var(--font-body); padding: 8px 14px; border-radius: var(--radius-sm); border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; margin-left: auto; }
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="wrap">
+    <a class="brand" href="./"><span class="brand-dot" aria-hidden="true"></span>WhatsDown</a>
+    <nav aria-label="Documents">
+      <a href="./">Overview</a>
+      <a href="plan.html">Plan</a>
+      <a href="board.html" aria-current="page">Board</a>
+      <a href="docs.html">Doc register</a>
+      <a href="functional.html">Functional spec</a>
+      <a href="technical.html">Technical spec</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap" style="max-width:1400px">
+  <section class="hero" style="padding-bottom:12px">
+    <p class="eyebrow">Document ii · Implementation board</p>
+    <h1>Implementation board</h1>
+    <p class="lede">Every backlog item from the plan. Filter by sprint, click a card to see its acceptance criteria, and move it with the dropdown or by dragging. Moves are saved in this browser only.</p>
+  </section>
+
+  <div class="toolbar">
+    <div class="chips" role="group" aria-label="Filter by sprint" id="chips"></div>
+    <input class="search" id="q" type="search" placeholder="Search cards…" aria-label="Search cards">
+    <button class="reset" id="reset" type="button">Reset board</button>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="legend" aria-label="Card types">
+    <span style="--c:var(--accent)">Story</span>
+    <span style="--c:var(--violet)">Spike</span>
+    <span style="--c:var(--ink-3)">Chore</span>
+    <span style="--c:var(--blue)">Docs</span>
+    <span style="--c:var(--amber)">Eval</span>
+  </div>
+
+  <div class="board" id="board"></div>
+  <footer class="footer">WhatsDown · Implementation board v0.1 · Story ids match the <a href="plan.html#sprints">plan</a>.</footer>
+</main>
+
+<dialog id="dlg" aria-labelledby="d-title">
+  <div class="d-head">
+    <div id="d-meta" class="k-tags"></div>
+    <h2 id="d-title"></h2>
+  </div>
+  <div class="d-body">
+    <p id="d-desc"></p>
+    <h4>Acceptance criteria</h4>
+    <ul id="d-ac" class="check"></ul>
+    <p id="d-deps" style="color:var(--ink-3);font-size:14px"></p>
+  </div>
+  <div class="d-foot">
+    <label for="d-status">Column</label>
+    <select id="d-status"></select>
+    <button class="btn primary" id="d-close" type="button">Done</button>
+  </div>
+</dialog>
+
+<script>
+const COLS = [
+  { id: "backlog", name: "Backlog" },
+  { id: "todo", name: "Sprint to-do" },
+  { id: "doing", name: "In progress" },
+  { id: "review", name: "Review / demo" },
+  { id: "done", name: "Done" }
+];
+const SPRINT_NAMES = { S0: "Foundations", S1: "Web intake", S2: "Triage", S3: "Diagnose + Gate 1", S4: "Developer + PR", S5: "QA + Gate 2", S6: "Notify + evals", S7: "WhatsApp", S8: "Hardening" };
+
+const CARDS = [
+  ["WD-1","S0","chore",2,"Scaffold Next.js + TypeScript app","Create the WhatsDown app locally with linting, formatting, unit tests and an env template.",["`npm run dev` serves a page","lint, typecheck and vitest scripts run clean",".env.example lists every variable"]],
+  ["WD-2","S0","chore",2,"Create Supabase project + first migration","New Supabase project `whatsdown` (separate from the fantasy app) with the first tables.",["Project created in the free tier","Migration creates projects, tickets, ticket_events","Supabase CLI linked locally"]],
+  ["WD-3","S0","spike",3,"Spike: LangGraph checkpointer","Prove a graph can pause on interrupt() and resume later from Postgres.",["3-node graph pauses at node 2","Process restart, then resume by thread_id works","Findings in ADR-002"],"WD-2"],
+  ["WD-4","S0","spike",5,"Spike: Inngest on Vercel","Prove long agent work can run in ~240 s slices on Vercel via Inngest steps.",["A graph that needs >5 min completes","Step retries survive a forced error","Fallback written if it fails"],"WD-3"],
+  ["WD-5","S0","spike",3,"Spike: E2B sandbox","Clone the fantasy repo in E2B, search it, and time a build.",["Read-only clone + ripgrep works","npm ci + build time recorded","Sandbox has no prod secrets"]],
+  ["WD-6","S0","chore",2,"Register GitHub App whatsdown-bot","Create the app with minimal permissions and install it on WCFantasyFootball only.",["Permissions: contents RW, pull requests RW, checks R, metadata R","Webhook secret set","Installation token obtained from code"]],
+  ["WD-7","S0","chore",2,"GitHub repo + Vercel deploy + CI","Move from local to GitHub, connect Vercel, add GitHub Actions.",["Push to main auto-deploys","PRs get preview URLs","CI runs lint, typecheck, test, build"],"WD-1"],
+  ["WD-8","S0","doc",1,"ADR-001 stack, ADR-002 durable execution","Record the stack decision and the spike outcomes.",["Both ADRs in docs/adr/","Linked from README"],"WD-4"],
+
+  ["WD-9","S1","story",3,"Public report form","A reporter can file a ticket with a screenshot and contact email.",["Required fields validated with Zod","Image ≤ 5 MB stored in Supabase Storage","Honeypot + rate limit stop spam"]],
+  ["WD-10","S1","story",2,"Admin login + RLS","Only allowlisted admins can see tickets.",["Magic-link login","RLS denies anon reads (tested)","Allowlist in env var"]],
+  ["WD-11","S1","story",3,"Ticket list + ticket page","See all tickets and each ticket's history.",["Filter by status and project","Timeline of ticket_events","Status badge with lifecycle colour"]],
+  ["WD-12","S1","story",2,"Project registry page","Configure target apps without code changes.",["Fantasy app row: repo, commands, context files, Node version, denylist","Edit form with validation"]],
+  ["WD-13","S1","chore",1,"Ticket event log helper","One helper writes every state change.",["Status changes only via helper","Actor (human/agent/system) recorded"]],
+  ["WD-14","S1","eval",2,"Playwright smoke test","Form-to-admin happy path is tested.",["Runs in CI against a preview","Fails if ticket isn't visible"],"WD-9"],
+
+  ["WD-15","S2","chore",3,"lib/llm router + usage logging","One place to call Groq or Claude, with cost tracking.",["Model chosen per role from project settings","Each call logs tokens + $ to llm_usage","429 → backoff, then fallback model"]],
+  ["WD-16","S2","story",2,"Injection screen (Prompt Guard)","Inbound text is screened before agents see it.",["Score stored on ticket","High score → quarantined + admin alert"],"WD-15"],
+  ["WD-17","S2","story",3,"Triage node","Classify, rate severity and check completeness.",["Zod-validated JSON output","Labels shown on ticket page","Status → triaged or needs_info"],"WD-15"],
+  ["WD-18","S2","story",2,"Duplicate detection (pg_trgm)","Spot likely duplicates among open tickets.",["Similarity > threshold → status duplicate + link","Admin can override"]],
+  ["WD-19","S2","story",3,"needs_info follow-up loop","Triage asks up to 2 clarifying questions.",["Reporter answers via ticket link","Graph resumes from interrupt"],"WD-17"],
+  ["WD-20","S2","eval",2,"Triage eval set (20 cases)","Measure triage accuracy.",["npm run eval:triage prints accuracy","≥ 85% on labels"],"WD-17"],
+
+  ["WD-21","S3","story",3,"Read-only sandbox tools","Tools the diagnosis agent uses to explore code.",["search_code, read_file, list_dir, git_log","Outputs capped (e.g. 20 KB)","No write tool exposed"],"WD-5"],
+  ["WD-22","S3","story",2,"Repo context loader + caching","Load CLAUDE.md and DOCS_MAP.md as cached context.",["Context listed in project registry","cache_read_input_tokens > 0 on 2nd call"]],
+  ["WD-23","S3","story",5,"Diagnostics node (Claude)","Find the root cause and propose a fix plan.",["Report: cause, evidence file:line, plan, risk, confidence","Max 25 tool calls","Trace visible in LangSmith"],"WD-21"],
+  ["WD-24","S3","story",3,"Gate 1: approve / reject / revise","You decide whether the plan goes ahead.",["Buttons on ticket page (admin only)","Revise note re-runs diagnosis","Decision stored in approvals"],"WD-23"],
+  ["WD-25","S3","chore",1,"Per-ticket cost guard","Stop runaway spend.",["Budget default $1.50 per ticket","Exceeded → failed + reason"]],
+
+  ["WD-26","S4","story",3,"Sandbox write tools","Edit files and run allowed checks.",["edit_file (str-replace), run_check","Only registry commands allowed","No network except npm registry"],"WD-21"],
+  ["WD-27","S4","story",5,"Developer node","Apply the approved plan and self-check.",["Runs lint + build after edits","Up to 2 self-fix loops","Produces diff + summary"],"WD-26"],
+  ["WD-28","S4","story",2,"Diff guard","Block risky files and huge diffs.",["Denylist from registry enforced","Max 400 changed lines","Unit tests for each rule"]],
+  ["WD-29","S4","story",3,"PR creator via GitHub App","Open a PR on the target repo.",["Branch agent/<ticket-id>","PR body: diagnosis, change summary, ticket link","Label made-by-whatsdown"],"WD-6"],
+  ["WD-30","S4","chore",1,"BACKLOG.md entry in PR","Respect the fantasy repo's backlog convention (decided: yes, in the same PR).",["App adds a second commit after the PR opens, so the PR number is known","Entry uses the repo's format: '## 🟡 <title> (<date>) — PR #<n>, WhatsDown ticket #<t>' plus 2–4 bullets, inserted below the header","Written from a template, not by the AI model; the 'Last Updated' line is not touched","BACKLOG.md is allowed by the diff guard only for this app-written commit","On a merge conflict, the entry is rebuilt on the latest main","Can be switched off per project"]],
+
+  ["WD-31","S5","story",2,"GitHub webhook endpoint","Receive CI and merge events securely.",["HMAC signature verified","Idempotent by delivery id"]],
+  ["WD-32","S5","story",3,"QA node + PR comment","Wait for CI and summarise results.",["Graph interrupts until check_suite completes","Comment lists jobs + outcome"],"WD-31"],
+  ["WD-33","S5","story",3,"CI failure retry loop","Feed failures back to the developer.",["Max 2 retries","Then failed + escalation"],"WD-32"],
+  ["WD-34","S5","story",2,"Gate 2: merge resumes graph","Your merge closes the loop.",["Merged → status merged","Closed unmerged → cancelled"],"WD-31"],
+  ["WD-35","S5","chore",1,"Timeouts + nudges","Nothing gets stuck silently.",["CI silent 90 min → reminder","PR open 7 days → nudge"]],
+
+  ["WD-36","S6","story",3,"Communicator + email","Keep reporters informed.",["Messages at triaged, awaiting_merge, merged","Sent with Resend","Tone: short, friendly, no jargon"]],
+  ["WD-37","S6","story",3,"Metrics page","See cost, speed and quality.",["Tickets by status","Time to PR, cost per ticket","Groq quota used today"]],
+  ["WD-38","S6","eval",5,"Replay benchmark (10 PRs)","Score agents against real historical fixes.",["10 cases from fantasy repo history","Runs at parent commit in sandbox","Scores: right file, equivalent fix, CI green"]],
+  ["WD-39","S6","eval",2,"Model experiment: Opus vs Sonnet","Decide the default coding model with data.",["Benchmark run on both","Result + decision in ADR"],"WD-38"],
+  ["WD-40","S6","doc",1,"Prompt catalogue","Version every prompt.",["prompts/*.md with version headers","Version stored on each run"]],
+
+  ["WD-41","S7","chore",2,"Meta app + WhatsApp test number","Set up the WhatsApp Business test environment.",["Test number active","Your phone verified as recipient"]],
+  ["WD-42","S7","story",3,"WhatsApp webhook","Receive messages securely.",["GET verify token","X-Hub-Signature-256 checked","Idempotent by message id"],"WD-41"],
+  ["WD-43","S7","story",1,"Phone allowlist","Only known reporters can open tickets.",["Unknown number → one polite reply","Allowlist managed in admin"]],
+  ["WD-44","S7","story",5,"Conversational intake","Chat to collect a good bug report.",["Asks for missing fields","Confirms before opening ticket","Conversation stored with ticket"],"WD-42"],
+  ["WD-45","S7","story",3,"Media + voice notes","Accept photos and voice.",["Images → Storage","Voice → Whisper transcript on ticket"]],
+  ["WD-46","S7","story",2,"WhatsApp outbound updates","Send updates on WhatsApp.",["Free-form inside 24 h window","Approved template outside it"]],
+
+  ["WD-47","S8","chore",3,"Threat model review + fixes","Close the security gaps found.",["STRIDE table updated","Fixes merged or ticketed"]],
+  ["WD-48","S8","doc",2,"Runbooks","Know what to do when things break.",["Stuck ticket, quota hit, E2B down, revoke app"]],
+  ["WD-49","S8","story",3,"Onboard a second app","Prove the platform is app-agnostic.",["Added via registry only","One ticket handled end to end"]],
+  ["WD-50","S8","story",3,"Embedding duplicate check","Better duplicate detection if needed.",["pgvector + embeddings","Better recall than trigram on test set"]],
+  ["WD-51","S8","doc",1,"Build retrospective","Learn from the whole journey.",["Keep / cut / try list","Next roadmap drafted"]]
+].map(([id, sprint, type, pts, title, desc, ac, deps]) => ({ id, sprint, type, pts, title, desc, ac, deps }));
+
+const STORE_KEY = "whatsdown-board-v1";
+function loadMoves() { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; } }
+function saveMoves() { try { localStorage.setItem(STORE_KEY, JSON.stringify(moves)); } catch (e) {} }
+let moves = loadMoves();
+let filter = "all";
+let query = "";
+const defaultStatus = c => c.sprint === "S0" ? "todo" : "backlog";
+const statusOf = c => moves[c.id] || defaultStatus(c);
+const md = s => s.replace(/[&<>]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[ch])).replace(/`([^`]+)`/g, "<code>$1</code>");
+
+function renderChips() {
+  const el = document.getElementById("chips");
+  const opts = [["all", "All sprints"], ...Object.keys(SPRINT_NAMES).map(s => [s, s])];
+  el.innerHTML = opts.map(([v, l]) => `<button class="chip" type="button" data-v="${v}" aria-pressed="${filter === v}" title="${SPRINT_NAMES[v] || ""}">${l}</button>`).join("");
+  el.querySelectorAll(".chip").forEach(b => b.onclick = () => { filter = b.dataset.v; renderChips(); render(); });
+}
+
+function render() {
+  const board = document.getElementById("board");
+  const visible = CARDS.filter(c => (filter === "all" || c.sprint === filter) && (!query || (c.id + " " + c.title + " " + c.desc).toLowerCase().includes(query)));
+  board.innerHTML = COLS.map(col => {
+    const cards = visible.filter(c => statusOf(c) === col.id);
+    const pts = cards.reduce((a, c) => a + c.pts, 0);
+    return `<section class="col" data-col="${col.id}" aria-label="${col.name}">
+      <div class="col-head"><h2>${col.name}</h2><span class="col-count">${cards.length} · ${pts} pts</span></div>
+      <div class="cards">${cards.length ? cards.map(c => `
+        <button class="kcard" type="button" draggable="true" data-id="${c.id}" data-type="${c.type}">
+          <div class="k-top"><span>${c.id}</span><span>${c.pts} pt</span></div>
+          <div class="k-title">${md(c.title)}</div>
+          <div class="k-tags"><span class="tag">${c.sprint}</span><span class="tag">${c.type}</span></div>
+        </button>`).join("") : `<div class="empty">Nothing here</div>`}</div>
+    </section>`;
+  }).join("");
+
+  board.querySelectorAll(".kcard").forEach(b => {
+    b.onclick = () => openCard(b.dataset.id);
+    b.ondragstart = e => { e.dataTransfer.setData("text/plain", b.dataset.id); };
+  });
+  board.querySelectorAll(".col").forEach(col => {
+    col.ondragover = e => { e.preventDefault(); col.classList.add("drag-over"); };
+    col.ondragleave = () => col.classList.remove("drag-over");
+    col.ondrop = e => { e.preventDefault(); col.classList.remove("drag-over"); const id = e.dataTransfer.getData("text/plain"); if (id) { moves[id] = col.dataset.col; saveMoves(); render(); } };
+  });
+
+  const all = CARDS.filter(c => filter === "all" || c.sprint === filter);
+  const done = all.filter(c => statusOf(c) === "done");
+  const totalPts = all.reduce((a, c) => a + c.pts, 0), donePts = done.reduce((a, c) => a + c.pts, 0);
+  document.getElementById("stats").innerHTML = `
+    <span class="tag">${all.length} cards</span>
+    <span class="tag">${totalPts} points</span>
+    <span class="tag green">${donePts} pts done (${totalPts ? Math.round(100 * donePts / totalPts) : 0}%)</span>
+    ${filter !== "all" ? `<span class="tag blue">${filter}: ${SPRINT_NAMES[filter]}</span>` : ""}`;
+}
+
+const dlg = document.getElementById("dlg");
+const sel = document.getElementById("d-status");
+sel.innerHTML = COLS.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+let current = null;
+function openCard(id) {
+  const c = CARDS.find(x => x.id === id); current = c;
+  document.getElementById("d-meta").innerHTML = `<span class="tag green">${c.id}</span><span class="tag">${c.sprint} · ${SPRINT_NAMES[c.sprint]}</span><span class="tag">${c.type}</span><span class="tag">${c.pts} pts</span>`;
+  document.getElementById("d-title").textContent = c.title;
+  document.getElementById("d-desc").innerHTML = md(c.desc);
+  document.getElementById("d-ac").innerHTML = c.ac.map(a => `<li>${md(a)}</li>`).join("");
+  document.getElementById("d-deps").textContent = c.deps ? `Depends on ${c.deps}` : "";
+  sel.value = statusOf(c);
+  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+}
+sel.onchange = () => { if (current) { moves[current.id] = sel.value; saveMoves(); render(); } };
+document.getElementById("d-close").onclick = () => dlg.close();
+dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });
+document.getElementById("q").oninput = e => { query = e.target.value.trim().toLowerCase(); render(); };
+document.getElementById("reset").onclick = () => { if (confirm("Reset all card positions to the plan defaults?")) { moves = {}; saveMoves(); render(); } };
+
+renderChips();
+render();
+</script>
+</body>
+</html>

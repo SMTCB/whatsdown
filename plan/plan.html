@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsDown Implementation Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@500;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topnav">
+  <div class="wrap">
+    <a class="brand" href="./"><span class="brand-dot" aria-hidden="true"></span>WhatsDown</a>
+    <nav aria-label="Documents">
+      <a href="./">Overview</a>
+      <a href="plan.html" aria-current="page">Plan</a>
+      <a href="board.html">Board</a>
+      <a href="docs.html">Doc register</a>
+      <a href="functional.html">Functional spec</a>
+      <a href="technical.html">Technical spec</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <p class="eyebrow">Document i · Implementation plan</p>
+    <h1>Implementation plan</h1>
+    <p class="lede">Nine one-week sprints take WhatsDown from an empty folder to a working agent crew that takes WhatsApp reports. Every sprint ends with something you can see and try.</p>
+    <div class="meta-row"><span class="tag green">S0 → S8</span><span class="tag">~6–10 hrs / sprint</span><span class="tag blue">Target: first agent-made PR by end of S4</span></div>
+  </section>
+
+  <div class="layout">
+    <aside class="toc" aria-label="On this page">
+      <p>On this page</p>
+      <ol>
+        <li><a href="#approach">Approach</a></li>
+        <li><a href="#stack">Tech stack</a></li>
+        <li><a href="#models">Model routing</a></li>
+        <li><a href="#roadmap">Roadmap</a></li>
+        <li><a href="#sprints">Sprints</a></li>
+        <li><a href="#local-to-git">Local → GitHub → Vercel</a></li>
+        <li><a href="#dod">Definition of done</a></li>
+        <li><a href="#risks">Risks</a></li>
+        <li><a href="#costs">Running costs</a></li>
+      </ol>
+    </aside>
+
+    <div class="content">
+      <h2 id="approach">How we'll work</h2>
+      <p>We'll use a light version of Scrum that fits a one-person hobby project:</p>
+      <div class="grid grid-3">
+        <div class="card"><h4>Sprint = 1 week</h4><p>About 6–10 hours of work. If life gets in the way, the sprint stretches. Scope doesn't grow to fill the time.</p></div>
+        <div class="card"><h4>Planning (15 min)</h4><p>Pick cards from the board into the sprint column. Each card has acceptance criteria, so "done" is never vague.</p></div>
+        <div class="card"><h4>Demo + review (20 min)</h4><p>Run the sprint's demo script. Write 3–5 lines in <code>docs/sprints/S#-review.md</code> covering what worked, what surprised you, and what changes.</p></div>
+        <div class="card"><h4>Backlog = the board</h4><p>The <a href="board.html">board</a> is the source of truth for scope. Story points (1, 2, 3, 5, 8) are a rough size, not a promise.</p></div>
+        <div class="card"><h4>Spikes first</h4><p>Risky unknowns, such as long-running agents on Vercel, get a timeboxed spike in Sprint 0 before anything is built on them.</p></div>
+        <div class="card"><h4>Decisions logged</h4><p>Any real choice becomes a short ADR (Architecture Decision Record) in <code>docs/adr/</code>, so you remember <em>why</em> later.</p></div>
+      </div>
+
+      <h2 id="stack">Tech stack</h2>
+      <p>Everything is TypeScript, in one Next.js app, so there's a single repo and a single deploy. Free tiers cover the hobby scale.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Layer</th><th>Choice</th><th>Why</th><th>Tier</th></tr></thead>
+          <tbody>
+            <tr><td>Language</td><td><b>TypeScript</b> (strict), Node 24</td><td>One language for UI, API and agents. Node 24 matches the fantasy repo.</td><td>—</td></tr>
+            <tr><td>Web app & API</td><td><b>Next.js 15</b> (App Router) + Tailwind 4</td><td>Ticket form, admin console and webhook endpoints all in one app. Vercel supports it natively.</td><td>—</td></tr>
+            <tr><td>Hosting</td><td><b>Vercel</b> (Hobby)</td><td>Auto-deploys <code>main</code>, with a preview URL for every PR.</td><td>Free</td></tr>
+            <tr><td>Database</td><td><b>Supabase Postgres</b> (new project <code>whatsdown</code>)</td><td>Tickets, events and audit trail. It also stores LangGraph checkpoints, so agents survive restarts.</td><td>Free</td></tr>
+            <tr><td>Auth</td><td><b>Supabase Auth</b> (email magic link)</td><td>Admin console login, for you only at first.</td><td>Free</td></tr>
+            <tr><td>File storage</td><td><b>Supabase Storage</b></td><td>Screenshots, WhatsApp images and voice notes.</td><td>Free</td></tr>
+            <tr><td>Agent framework</td><td><b>LangGraph.js</b> + <code>@langchain/langgraph-checkpoint-postgres</code></td><td>Explicit graph, human-in-the-loop interrupts, and resume by ticket id.</td><td>OSS</td></tr>
+            <tr><td>Durable jobs</td><td><b>Inngest</b></td><td>Runs agent steps in the background with retries, beyond Vercel's request time limit.</td><td>Free</td></tr>
+            <tr><td>Code sandbox</td><td><b>E2B</b></td><td>Disposable Linux box to clone, search, edit, lint and build the target repo safely.</td><td>Free credit</td></tr>
+            <tr><td>Git integration</td><td><b>GitHub App</b> "whatsdown-bot" (Octokit)</td><td>Short-lived tokens, scoped to one repo, with webhooks for CI and merge events.</td><td>Free</td></tr>
+            <tr><td>LLM: light work</td><td><b>Groq</b> (<code>groq-sdk</code>)</td><td>Free and fast models for triage, messages, the injection screen and speech-to-text.</td><td>Free</td></tr>
+            <tr><td>LLM: heavy work</td><td><b>Claude</b> (<code>@anthropic-ai/sdk</code>)</td><td>Diagnosis and code changes. Native SDK gives access to prompt caching, effort control and refusal fallback.</td><td>Pay-as-you-go</td></tr>
+            <tr><td>Messaging</td><td><b>WhatsApp Cloud API</b> (Meta, test number)</td><td>Official API. The test number can message up to 5 verified recipients for free.</td><td>Free (test)</td></tr>
+            <tr><td>Email</td><td><b>Resend</b></td><td>Notifications for web-form reporters.</td><td>Free</td></tr>
+            <tr><td>Tracing</td><td><b>LangSmith</b></td><td>Shows each agent run step by step: prompts, tool calls, tokens.</td><td>Free dev</td></tr>
+            <tr><td>Validation</td><td><b>Zod</b></td><td>Schemas for agent outputs, webhooks and forms.</td><td>OSS</td></tr>
+            <tr><td>Tests</td><td><b>Vitest</b> + <b>Playwright</b> (smoke)</td><td>Unit tests for guards and parsers, plus an end-to-end check of the ticket form.</td><td>OSS</td></tr>
+            <tr><td>CI</td><td><b>GitHub Actions</b></td><td>Lint, typecheck, test and build on every PR to WhatsDown itself.</td><td>Free</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout info"><strong>Change from the proposed approach</strong><p>Claude and Groq are called through their own SDKs behind a small <code>lib/llm</code> router, instead of the Vercel AI SDK. Claude's prompt caching, effort and refusal-fallback settings are first-class in the native SDK, which keeps the agents cheaper and easier to tune.</p></div>
+
+      <h2 id="models">Model routing</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Agent / task</th><th>Model</th><th>Provider</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Injection screen</td><td><code>meta-llama/llama-prompt-guard-2-86m</code></td><td>Groq</td><td>Runs on every inbound message before any agent sees it.</td></tr>
+            <tr><td>Voice notes</td><td><code>whisper-large-v3-turbo</code></td><td>Groq</td><td>WhatsApp audio → text (S7).</td></tr>
+            <tr><td>Triage</td><td><code>openai/gpt-oss-20b</code></td><td>Groq</td><td>Classify, rate severity, check completeness, ask follow-up questions. JSON output.</td></tr>
+            <tr><td>Diagnostics</td><td><code>claude-opus-5-5</code> · effort <code>high</code></td><td>Anthropic</td><td>Reads the code through sandbox tools and proposes a root cause plus a fix plan.</td></tr>
+            <tr><td>Developer</td><td><code>claude-opus-5-5</code> · effort <code>high</code></td><td>Anthropic</td><td>Edits files in the sandbox and runs lint and build. Max 2 self-fix loops.</td></tr>
+            <tr><td>QA summary</td><td><code>openai/gpt-oss-20b</code></td><td>Groq</td><td>Turns CI results into a short PR comment.</td></tr>
+            <tr><td>Communicator</td><td><code>openai/gpt-oss-120b</code></td><td>Groq</td><td>Writes friendly updates for the reporter in their language.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Each model id is a setting in the <code>projects</code> table, not hard-coded. In Sprint 6 the replay benchmark compares <code>claude-sonnet-5-5</code> ($2 / $10 per million tokens) with Opus 5.5 ($4 / $20). If Sonnet scores the same on your real bugs, switching saves about half the cost.</p>
+
+      <h2 id="roadmap">Roadmap at a glance</h2>
+      <div class="figure">
+        <svg viewBox="0 0 900 250" role="img" aria-label="Roadmap: S0 foundations, S1 web intake, S2 triage, S3 diagnosis and gate 1, S4 developer and PR, S5 QA and gate 2, S6 communicator and evals, S7 WhatsApp, S8 hardening">
+          <style>
+            .lbl{font:600 13px 'Source Sans 3',sans-serif;fill:#1d2320}
+            .sub{font:500 11px 'JetBrains Mono',monospace;fill:#6b736f}
+            .ms{font:600 12px 'Source Sans 3',sans-serif;fill:#0a5c3b}
+          </style>
+          <line x1="20" y1="60" x2="880" y2="60" stroke="#cfccc1" stroke-width="2"/>
+          <g>
+            <rect x="20" y="40" width="88" height="40" rx="6" fill="#f0efe9" stroke="#cfccc1"/><text x="64" y="64" text-anchor="middle" class="lbl">S0</text>
+            <rect x="116" y="40" width="88" height="40" rx="6" fill="#e6eff9" stroke="#c4d8ef"/><text x="160" y="64" text-anchor="middle" class="lbl">S1</text>
+            <rect x="212" y="40" width="88" height="40" rx="6" fill="#e6eff9" stroke="#c4d8ef"/><text x="256" y="64" text-anchor="middle" class="lbl">S2</text>
+            <rect x="308" y="40" width="88" height="40" rx="6" fill="#e3f3ea" stroke="#bfe3cf"/><text x="352" y="64" text-anchor="middle" class="lbl">S3</text>
+            <rect x="404" y="40" width="88" height="40" rx="6" fill="#e3f3ea" stroke="#bfe3cf"/><text x="448" y="64" text-anchor="middle" class="lbl">S4</text>
+            <rect x="500" y="40" width="88" height="40" rx="6" fill="#e3f3ea" stroke="#bfe3cf"/><text x="544" y="64" text-anchor="middle" class="lbl">S5</text>
+            <rect x="596" y="40" width="88" height="40" rx="6" fill="#efe9f9" stroke="#d8ccef"/><text x="640" y="64" text-anchor="middle" class="lbl">S6</text>
+            <rect x="692" y="40" width="88" height="40" rx="6" fill="#fbf0dc" stroke="#f0d6a8"/><text x="736" y="64" text-anchor="middle" class="lbl">S7</text>
+            <rect x="788" y="40" width="88" height="40" rx="6" fill="#f0efe9" stroke="#cfccc1"/><text x="832" y="64" text-anchor="middle" class="lbl">S8</text>
+          </g>
+          <text x="64" y="102" text-anchor="middle" class="sub">foundation</text>
+          <text x="160" y="102" text-anchor="middle" class="sub">web intake</text>
+          <text x="256" y="102" text-anchor="middle" class="sub">triage</text>
+          <text x="352" y="102" text-anchor="middle" class="sub">diagnose</text>
+          <text x="448" y="102" text-anchor="middle" class="sub">fix + PR</text>
+          <text x="544" y="102" text-anchor="middle" class="sub">QA + merge</text>
+          <text x="640" y="102" text-anchor="middle" class="sub">notify + eval</text>
+          <text x="736" y="102" text-anchor="middle" class="sub">WhatsApp</text>
+          <text x="832" y="102" text-anchor="middle" class="sub">harden</text>
+          <g>
+            <path d="M64 130 v24" stroke="#0f7a4f" stroke-width="2"/><circle cx="64" cy="160" r="5" fill="#0f7a4f"/>
+            <text x="76" y="164" class="ms">On GitHub + Vercel</text>
+            <path d="M352 130 v54" stroke="#a15c07" stroke-width="2"/><circle cx="352" cy="190" r="5" fill="#a15c07"/>
+            <text x="364" y="194" class="ms" style="fill:#a15c07">Gate 1 live</text>
+            <path d="M448 130 v84" stroke="#0f7a4f" stroke-width="2"/><circle cx="448" cy="220" r="5" fill="#0f7a4f"/>
+            <text x="460" y="224" class="ms">First agent PR</text>
+            <path d="M640 130 v24" stroke="#0f7a4f" stroke-width="2"/><circle cx="640" cy="160" r="5" fill="#0f7a4f"/>
+            <text x="652" y="164" class="ms">End-to-end v1</text>
+            <path d="M736 130 v54" stroke="#0f7a4f" stroke-width="2"/><circle cx="736" cy="190" r="5" fill="#0f7a4f"/>
+            <text x="748" y="194" class="ms">WhatsApp ticket</text>
+          </g>
+        </svg>
+      </div>
+
+      <h2 id="sprints">Sprints</h2>
+      <p>Click a sprint to expand it. Story ids (e.g. <code>WD-12</code>) match the cards on the <a href="board.html">board</a>.</p>
+
+      <details class="sprint" open>
+        <summary><span class="sprint-num">S0</span><div><p class="sprint-title">Foundations & spikes</p><p class="sprint-goal">An empty but deployed app, and proof that the three risky pieces work.</p></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="sprint-body">
+          <h4>Stories</h4>
+          <ul>
+            <li><b>WD-1</b> Scaffold the Next.js + TypeScript app locally (lint, Prettier, Vitest, <code>.env.example</code>).</li>
+            <li><b>WD-2</b> Create the Supabase project <code>whatsdown</code>. Link the CLI and add the first migration (<code>projects</code>, <code>tickets</code>, <code>ticket_events</code>).</li>
+            <li><b>WD-3</b> <i>Spike</i>: LangGraph.js with the Postgres checkpointer. Run a 3-node graph that pauses on <code>interrupt()</code> and resumes by <code>thread_id</code>.</li>
+            <li><b>WD-4</b> <i>Spike</i>: Inngest on Vercel. A step resumes the graph in a loop of about 240 s per call until the graph pauses or ends.</li>
+            <li><b>WD-5</b> <i>Spike</i>: E2B. Clone the fantasy repo read-only, run <code>rg</code>, and time an <code>npm ci && npm run build</code>.</li>
+            <li><b>WD-6</b> Register the GitHub App <code>whatsdown-bot</code> and install it on <code>WCFantasyFootball</code> only.</li>
+            <li><b>WD-7</b> Create the WhatsDown GitHub repo, push, connect it to Vercel, and set env vars. Add a CI workflow.</li>
+            <li><b>WD-8</b> Write ADR-001 (stack) and ADR-002 (durable execution pattern) from the spike results.</li>
+          </ul>
+          <h4>Demo</h4><p>Open the Vercel URL and see a "Hello WhatsDown" page with a health check showing DB ✓, Inngest ✓, E2B ✓ and GitHub App ✓.</p>
+          <h4>Exit criteria</h4><ul class="check"><li>All three spikes pass, or the ADR records a fallback (e.g. Inngest → Vercel Cron + queue table).</li><li>A push to <code>main</code> deploys automatically.</li><li>No secrets in git (<code>.env.local</code> is ignored).</li></ul>
+        </div>
+      </details>
+
+      <details class="sprint">
+        <summary><span class="sprint-num">S1</span><div><p class="sprint-title">Web intake & admin console</p><p class="sprint-goal">Anyone can file a ticket. You can see it, with its full history.</p></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="sprint-body">
+          <ul>
+            <li><b>WD-9</b> Public report form (title, what happened, steps, expected, screenshot, contact email), with spam protection (honeypot + rate limit).</li>
+            <li><b>WD-10</b> Admin login (Supabase magic link, allowlisted email) and RLS policies.</li>
+            <li><b>WD-11</b> Ticket list (filter by status and project) and ticket page with an event timeline.</li>
+            <li><b>WD-12</b> Project registry page: the fantasy app row (repo, commands, context files, Node version, denylist).</li>
+            <li><b>WD-13</b> Ticket event log helper. Every state change writes a <code>ticket_events</code> row.</li>
+            <li><b>WD-14</b> Playwright smoke test: submit the form, then see the ticket in admin.</li>
+          </ul>
+          <h4>Demo</h4><p>File "Leaderboard shows wrong points" from your phone. It appears in the admin list as <code>new</code>.</p>
+          <h4>Exit criteria</h4><ul class="check"><li>Anonymous users can't read tickets (RLS tested).</li><li>Screenshot upload is limited to 5 MB and image types only.</li></ul>
+        </div>
+      </details>
+
+      <details class="sprint">
+        <summary><span class="sprint-num">S2</span><div><p class="sprint-title">Triage agent</p><p class="sprint-goal">New tickets are screened, classified and de-duplicated automatically.</p></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="sprint-body">
+          <ul>
+            <li><b>WD-15</b> <code>lib/llm</code> router (Groq + Anthropic clients), logging every call to <code>llm_usage</code>.</li>
+            <li><b>WD-16</b> Injection screen with Prompt Guard. Flagged text is quarantined and an admin is notified.</li>
+            <li><b>WD-17</b> Triage node: type (bug, feature, question), severity, area, completeness score. Zod-validated JSON.</li>
+            <li><b>WD-18</b> Duplicate check with <code>pg_trgm</code> similarity against open tickets, and a link to the likely original.</li>
+            <li><b>WD-19</b> <code>needs_info</code> loop: triage asks up to 2 follow-up questions through a reply link on the ticket page.</li>
+            <li><b>WD-20</b> Triage eval set: 20 hand-written sample tickets with expected labels, run with <code>npm run eval:triage</code>.</li>
+          </ul>
+          <h4>Demo</h4><p>File a vague ticket. Triage asks one question. Answer it, and the ticket moves to <code>triaged</code> with labels. File a near-duplicate, and it is linked.</p>
+          <h4>Exit criteria</h4><ul class="check"><li>At least 85% label accuracy on the eval set.</li><li>Stays inside Groq free limits (calls are counted in <code>llm_usage</code>).</li></ul>
+        </div>
+      </details>
+
+      <details class="sprint">
+        <summary><span class="sprint-num">S3</span><div><p class="sprint-title">Diagnostics agent & Gate 1</p><p class="sprint-goal">The agent reads the real code, explains the likely cause, and waits for your OK.</p></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="sprint-body">
+          <ul>
+            <li><b>WD-21</b> Sandbox tools (read-only mode): <code>search_code</code> (ripgrep), <code>read_file</code>, <code>list_dir</code>, <code>git_log</code>. Size-capped output.</li>
+            <li><b>WD-22</b> Context loader: <code>CLAUDE.md</code> + <code>docs/DOCS_MAP.md</code> from the target repo, prompt-cached.</li>
+            <li><b>WD-23</b> Diagnostics node (Claude with tool use, adaptive thinking, budget cap). Output: root cause, evidence (file:line), fix plan, risk, confidence.</li>
+            <li><b>WD-24</b> Gate 1 UI: Approve, Reject or "Revise with note" on the ticket page. The graph resumes from <code>interrupt()</code>.</li>
+            <li><b>WD-25</b> Cost guard: stop the run and mark it <code>failed</code> if a ticket exceeds its $ budget (default $1.50).</li>
+          </ul>
+          <h4>Demo</h4><p>A real (or replayed) fantasy bug gets a diagnosis report with file references. Click "Revise", add a note, and see a revised plan.</p>
+          <h4>Exit criteria</h4><ul class="check"><li>Diagnosis never writes to the repo (read-only token + sandbox mode).</li><li>Every tool call is visible in LangSmith.</li></ul>
+        </div>
+      </details>
+
+      <details class="sprint">
+        <summary><span class="sprint-num">S4</span><div><p class="sprint-title">Developer agent & pull request</p><p class="sprint-goal">An approved plan becomes a real pull request on the fantasy repo.</p></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="sprint-body">
+          <ul>
+            <li><b>WD-26</b> Sandbox write mode: <code>edit_file</code> (str-replace), <code>run_check</code> (lint, build, madge, unit tests only).</li>
+            <li><b>WD-27</b> Developer node: apply the plan, run checks, self-fix up to 2 times.</li>
+            <li><b>WD-28</b> Diff guard. Block changes to <code>supabase/migrations/**</code>, <code>supabase/functions/**</code>, <code>.github/**</code>, <code>package*.json</code>, <code>ios/**</code>, <code>android/**</code>, <code>middleware.js</code>, <code>vercel.json</code> and <code>capacitor.config.ts</code>. Also cap the diff size.</li>
+            <li><b>WD-29</b> PR creator: the GitHub App pushes branch <code>agent/&lt;ticket-id&gt;</code> and opens a PR with the diagnosis, the diff summary and a "made by WhatsDown" label.</li>
+            <li><b>WD-30</b> BACKLOG.md entry added in the same PR (decided: yes). After the PR opens, the app adds a second commit that inserts <code>## 🟡 &lt;title&gt; (&lt;date&gt;) — PR #&lt;n&gt;, WhatsDown ticket #&lt;t&gt;</code> plus 2–4 bullets (cause, change, files) just below the header. It doesn't touch the "Last Updated" line. If BACKLOG.md conflicts, the app rebuilds the entry on the latest <code>main</code>.</li>
+          </ul>
+          <h4>Demo</h4><p>Approve a plan. Within minutes a PR appears on GitHub with a clean diff, and Vercel posts a preview link.</p>
+          <h4>Exit criteria</h4><ul class="check"><li>A test patch that touches a migration is blocked (unit test).</li><li>The sandbox has no production secrets, and the app (not the sandbox) does the push.</li></ul>
+        </div>
+      </details>
+
+      <details class="sprint">
+        <summary><span class="sprint-num">S5</span><div><p class="sprint-title">QA agent & Gate 2</p><p class="sprint-goal">CI results are read automatically. Your merge closes the loop.</p></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="sprint-body">
+          <ul>
+            <li><b>WD-31</b> GitHub webhook endpoint (signature check) for <code>check_suite</code>, <code>check_run</code> and <code>pull_request.closed</code>.</li>
+            <li><b>WD-32</b> QA node: wait (interrupt) for CI, then summarise the pass/fail and post a PR comment.</li>
+            <li><b>WD-33</b> Failure loop: send the CI logs back to the Developer, up to 2 retries, then escalate (<code>failed</code> + your attention).</li>
+            <li><b>WD-34</b> Gate 2: merging the PR on GitHub resumes the graph (<code>merged</code>). Closing it without merging cancels the graph.</li>
+            <li><b>WD-35</b> Timeout handling: CI silent for 90 min → reminder; PR unmerged after 7 days → nudge.</li>
+          </ul>
+          <h4>Demo</h4><p>The PR's CI goes green and a QA comment appears. You merge, the ticket shows <code>merged</code>, and Vercel deploys.</p>
+          <div class="callout warn"><strong>Preview caution</strong><p>Vercel previews of the fantasy app may point at the live Supabase. Use them only to look around, never to test writes.</p></div>
+        </div>
+      </details>
+
+      <details class="sprint">
+        <summary><span class="sprint-num">S6</span><div><p class="sprint-title">Communicator, observability & evals</p><p class="sprint-goal">Reporters hear back. You can see cost, speed and quality.</p></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="sprint-body">
+          <ul>
+            <li><b>WD-36</b> Communicator node: plain-language updates at <code>triaged</code>, <code>awaiting_merge</code> and <code>merged</code>, sent by email (Resend).</li>
+            <li><b>WD-37</b> Metrics page: tickets by status, time-to-PR, cost per ticket, Groq quota used.</li>
+            <li><b>WD-38</b> Replay benchmark: 10 historical bug-fix PRs from the fantasy repo. Check out the parent commit, run diagnosis and developer, and compare with the real fix.</li>
+            <li><b>WD-39</b> Model experiment: Opus 5.5 vs Sonnet 5.5 on the benchmark. Record the result in an ADR.</li>
+            <li><b>WD-40</b> Prompt catalogue: all prompts in <code>prompts/*.md</code> with version numbers.</li>
+          </ul>
+          <h4>Demo</h4><p>An end-to-end ticket: form → email updates → merged fix. A benchmark score card shows e.g. "6/10 correct file, 4/10 equivalent fix".</p>
+        </div>
+      </details>
+
+      <details class="sprint">
+        <summary><span class="sprint-num">S7</span><div><p class="sprint-title">WhatsApp intake</p><p class="sprint-goal">Report a bug by WhatsApp, including photos and voice notes, and get updates there.</p></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="sprint-body">
+          <ul>
+            <li><b>WD-41</b> Meta developer app + WhatsApp test number. Verify your phone as a recipient.</li>
+            <li><b>WD-42</b> Webhook: <code>GET</code> verify token, <code>POST</code> with <code>X-Hub-Signature-256</code> check, idempotent by message id.</li>
+            <li><b>WD-43</b> Phone allowlist (<code>reporters</code> table). Unknown numbers get one polite reply and nothing else.</li>
+            <li><b>WD-44</b> Conversational intake: the Triage agent chats to fill missing fields, then confirms "Shall I open this ticket?"</li>
+            <li><b>WD-45</b> Media: images → Storage; voice → Whisper transcript attached to the ticket.</li>
+            <li><b>WD-46</b> Outbound updates: free-form inside the 24 h window; an approved <code>ticket_update</code> template outside it.</li>
+          </ul>
+          <h4>Demo</h4><p>Send a voice note: "the transfer button does nothing". A ticket is opened, and you later get a WhatsApp message saying it's fixed.</p>
+          <div class="callout warn"><strong>Lead time</strong><p>Template approval by Meta can take hours to days. Submit the template on day 1 of the sprint.</p></div>
+        </div>
+      </details>
+
+      <details class="sprint">
+        <summary><span class="sprint-num">S8</span><div><p class="sprint-title">Hardening & second project</p><p class="sprint-goal">Make it robust, then prove it's app-agnostic.</p></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></summary>
+        <div class="sprint-body">
+          <ul>
+            <li><b>WD-47</b> Threat-model review and fixes (webhook replay, prompt injection via repo content, token scopes).</li>
+            <li><b>WD-48</b> Runbooks: stuck ticket, Groq quota hit, E2B down, revoke GitHub App.</li>
+            <li><b>WD-49</b> Onboard a second hobby app through the registry only (no code changes). That proves the platform is app-agnostic.</li>
+            <li><b>WD-50</b> Embedding-based duplicate check (pgvector) if trigram matching proves weak.</li>
+            <li><b>WD-51</b> Retrospective of the whole build: what to keep, cut or try next.</li>
+          </ul>
+        </div>
+      </details>
+
+      <h2 id="local-to-git">Local → GitHub → Vercel</h2>
+      <div class="flow">
+        <span class="step">1 · Build locally</span><span class="arrow">→</span>
+        <span class="step">2 · <code>git init</code> + first commit</span><span class="arrow">→</span>
+        <span class="step">3 · Create GitHub repo, push</span><span class="arrow">→</span>
+        <span class="step">4 · Import in Vercel</span><span class="arrow">→</span>
+        <span class="step">5 · Branch protection on <code>main</code></span>
+      </div>
+      <ol>
+        <li><b>Days 1–3 of S0:</b> work only on your machine. Supabase is already in the cloud, so local code talks to the real <code>whatsdown</code> project, which is fine because it holds no user data yet. Run Inngest's dev server locally with <code>npx inngest-cli dev</code>.</li>
+        <li><b>End of S0:</b> create a private repo <code>whatsdown</code> on GitHub, push, and import it in Vercel. Add all env vars in Vercel (Production + Preview). Connect Inngest via its Vercel integration.</li>
+        <li><b>From S1 on:</b> every story gets a branch → PR → CI → merge to <code>main</code> → automatic production deploy. Previews get their own URL.</li>
+        <li><b>Migrations:</b> written with the Supabase CLI (<code>supabase migration new</code>) and applied with <code>supabase db push</code> by you. Never applied by agents.</li>
+      </ol>
+
+      <h2 id="dod">Definition of done</h2>
+      <ul class="check">
+        <li>Acceptance criteria on the card are met and shown in the sprint demo.</li>
+        <li>Lint, typecheck, unit tests and build pass in CI.</li>
+        <li>New env vars are added to <code>.env.example</code> and the <a href="technical.html#env">env table</a>.</li>
+        <li>Any schema change is a migration file, and the data model doc is updated.</li>
+        <li>Agent prompts are versioned in <code>prompts/</code>, and a LangSmith trace was checked once.</li>
+        <li>The <a href="docs.html">doc register</a> entries touched by the story are updated.</li>
+      </ul>
+
+      <h2 id="risks">Risks & mitigations</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Risk</th><th>Impact</th><th>Mitigation</th></tr></thead>
+          <tbody>
+            <tr><td>Agent runs exceed Vercel's time limit</td><td><span class="tag red">High</span></td><td>Inngest step loop with checkpoint resume (spike WD-4). Fallback: a queue table plus Vercel Cron.</td></tr>
+            <tr><td>Agent breaks the live fantasy app</td><td><span class="tag red">High</span></td><td>Diff guard, PR-only, your merge required, branch protection, no prod secrets in the sandbox, no e2e against prod.</td></tr>
+            <tr><td>Groq free quota runs out</td><td><span class="tag amber">Med</span></td><td>Usage tracking, a backoff queue, and automatic fallback of light tasks to <code>claude-haiku-5-5</code>.</td></tr>
+            <tr><td>Claude cost creep</td><td><span class="tag amber">Med</span></td><td>Per-ticket $ budget, prompt caching, effort tuning, and a monthly cap set in the Anthropic console.</td></tr>
+            <tr><td>Prompt injection via ticket text or repo files</td><td><span class="tag amber">Med</span></td><td>Prompt Guard screen, tool allowlist, read-only diagnosis, a human gate before any write.</td></tr>
+            <tr><td>WhatsApp template rejected or delayed</td><td><span class="tag">Low</span></td><td>Submit early. Email fallback stays on.</td></tr>
+            <tr><td>Scope creep (it's fun!)</td><td><span class="tag">Low</span></td><td>New ideas go to the board's backlog, never into the running sprint.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="costs">Expected running costs</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Item</th><th>Estimate (hobby volume, ~10 tickets/month)</th></tr></thead>
+          <tbody>
+            <tr><td>Vercel, Supabase, Inngest, Resend, LangSmith, GitHub, Groq</td><td>$0 (free tiers)</td></tr>
+            <tr><td>E2B</td><td>$0 while the free credit lasts; then about $0.05–0.10 per ticket</td></tr>
+            <tr><td>Claude: diagnosis + fix per ticket</td><td>About $0.30–1.20 on Opus 5.5 with caching; about half that on Sonnet 5.5</td></tr>
+            <tr><td>Claude: replay benchmark (S6)</td><td>About $5–15 per full run of 10 cases</td></tr>
+            <tr><td>WhatsApp test number</td><td>$0 (test numbers aren't billed)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="color:var(--ink-3);font-size:14px">Claude prices are from Anthropic's list as of Oct 2026: Opus 5.5 $4 / $20 and Sonnet 5.5 $2 / $10 per million input/output tokens. Estimates assume 60–200k input tokens and 5–15k output tokens per ticket.</p>
+
+      <footer class="footer">WhatsDown · Implementation plan v0.1</footer>
+    </div>
+  </div>
+</main>
+</body>
+</html>

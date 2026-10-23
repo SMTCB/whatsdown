@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsDown Documentation Register</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@500;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+  .filters button { font: 600 13.5px var(--font-body); padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2); cursor: pointer; }
+  .filters button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+  td:first-child { font-weight: 600; }
+  td .path { font: 500 12.5px var(--font-mono); color: var(--ink-2); display: block; margin-top: 2px; word-break: break-all; }
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="wrap">
+    <a class="brand" href="./"><span class="brand-dot" aria-hidden="true"></span>WhatsDown</a>
+    <nav aria-label="Documents">
+      <a href="./">Overview</a>
+      <a href="plan.html">Plan</a>
+      <a href="board.html">Board</a>
+      <a href="docs.html" aria-current="page">Doc register</a>
+      <a href="functional.html">Functional spec</a>
+      <a href="technical.html">Technical spec</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <p class="eyebrow">Document iii · Documentation register</p>
+    <h1>Documentation register</h1>
+    <p class="lede">Every document WhatsDown produces. Some you write while building. Others the agents write automatically for every ticket. Each row says where the document lives, who writes it, when it first appears and what triggers an update.</p>
+  </section>
+
+  <div class="grid grid-3" style="margin-bottom:24px">
+    <div class="card"><h4>📁 In the WhatsDown repo</h4><p>Markdown under <code>docs/</code>, versioned with the code. Reviewed in PRs like any other change.</p></div>
+    <div class="card"><h4>🗄️ In the database</h4><p>Per-ticket reports from the agents, stored in the <code>artifacts</code> table and shown on the ticket page.</p></div>
+    <div class="card"><h4>🔗 In the target repo</h4><p>PR descriptions, PR comments and BACKLOG.md entries the bot writes on the fantasy repo.</p></div>
+  </div>
+
+  <div class="filters" role="group" aria-label="Filter by category" id="filters"></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Document</th><th>Purpose</th><th>Written by</th><th>First in</th><th>Updated when</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p style="color:var(--ink-3);font-size:14px" id="count"></p>
+
+  <h2>Lifecycle of the per-ticket documents</h2>
+  <p>For each ticket the agents write a short trail of documents, so you can always see what was decided and why:</p>
+  <div class="flow">
+    <span class="step">Intake record</span><span class="arrow">→</span>
+    <span class="step">Triage note</span><span class="arrow">→</span>
+    <span class="step">Diagnosis report</span><span class="arrow">→</span>
+    <span class="step gate">Gate 1 decision</span><span class="arrow">→</span>
+    <span class="step">Change summary + PR</span><span class="arrow">→</span>
+    <span class="step">QA report</span><span class="arrow">→</span>
+    <span class="step gate">Merge record</span><span class="arrow">→</span>
+    <span class="step">Reporter messages</span>
+  </div>
+
+  <h2>Conventions</h2>
+  <ul>
+    <li><b>Format:</b> Markdown for repo documents. Agent reports are stored as JSON (for machines) plus Markdown (for you).</li>
+    <li><b>ADRs:</b> numbered <code>ADR-NNN-short-title.md</code>, using a context → decision → consequences template. Once accepted, an ADR is never edited; a new one supersedes it.</li>
+    <li><b>Prompts:</b> one file per agent role. A front-matter <code>version</code> is bumped on every change, and each agent run records the version it used.</li>
+    <li><b>Ownership:</b> "You" means you write or approve it. "Agent" means it's generated and shown read-only. "Auto" means a script or CI generates it.</li>
+  </ul>
+
+  <footer class="footer">WhatsDown · Documentation register v0.1</footer>
+</main>
+
+<script>
+const DOCS = [
+  // [category, name, path, purpose, owner, sprint, trigger]
+  ["Project", "README", "README.md", "What WhatsDown is, how to run it locally, links to everything else.", "You", "S0", "Setup steps or scripts change"],
+  ["Project", "Implementation plan", "docs/plan.html", "Stack, sprints, roadmap, risks (this pack).", "You", "S0", "Sprint planning"],
+  ["Project", "Implementation board", "docs/board.html → GitHub Projects (optional)", "Backlog and sprint status.", "You", "S0", "Every work session"],
+  ["Project", "Sprint review notes", "docs/sprints/S#-review.md", "What was demoed, learned and changed per sprint.", "You", "S0", "End of each sprint"],
+  ["Project", "CHANGELOG", "CHANGELOG.md", "User-visible changes per release.", "You", "S1", "Every merged feature"],
+  ["Project", "Build retrospective", "docs/retro.md", "Keep / cut / try after the full build.", "You", "S8", "Once, then yearly"],
+
+  ["Specs", "Functional specification", "docs/functional-spec.md", "What the platform does: actors, flows, rules.", "You", "S0", "Behaviour changes"],
+  ["Specs", "Technical specification", "docs/technical-spec.md", "How it's built: architecture, data, integrations.", "You", "S0", "Architecture changes"],
+  ["Specs", "Data model", "docs/data-model.md", "Tables, columns, statuses, RLS rules (+ ER diagram).", "You", "S0", "Every migration"],
+  ["Specs", "API & webhook reference", "docs/api.md", "Endpoints: report form, GitHub webhook, WhatsApp webhook, Inngest.", "You", "S1", "Endpoint added or changed"],
+
+  ["Architecture", "ADR-001 Tech stack", "docs/adr/ADR-001-stack.md", "Why Next.js, Supabase, LangGraph, Inngest, E2B.", "You", "S0", "Never (superseded instead)"],
+  ["Architecture", "ADR-002 Durable execution", "docs/adr/ADR-002-durable-execution.md", "Inngest step loop + checkpoint resume; spike results.", "You", "S0", "Never"],
+  ["Architecture", "ADR-003 GitHub App & branch policy", "docs/adr/ADR-003-github-app.md", "Permissions, branch prefix, who pushes.", "You", "S0", "Never"],
+  ["Architecture", "ADR-004 Model routing", "docs/adr/ADR-004-model-routing.md", "Which model does which job, and why.", "You", "S2", "Superseded after S6 experiment"],
+  ["Architecture", "ADR-005 Diff guard policy", "docs/adr/ADR-005-diff-guard.md", "What agents may never change.", "You", "S4", "Never"],
+  ["Architecture", "ADR-006 WhatsApp provider", "docs/adr/ADR-006-whatsapp.md", "Cloud API vs alternatives; template policy.", "You", "S7", "Never"],
+
+  ["Agents", "Prompt catalogue", "prompts/*.md", "System prompt per agent role, versioned.", "You", "S2", "Any prompt edit (bump version)"],
+  ["Agents", "Agent cards", "docs/agents/<role>.md", "Per agent: job, inputs, outputs, tools, model, limits.", "You", "S2", "Agent behaviour changes"],
+  ["Agents", "Tool catalogue", "docs/agents/tools.md", "Every sandbox/GitHub tool, its schema and safety limits.", "You", "S3", "Tool added or changed"],
+  ["Agents", "Project registry guide", "docs/onboarding-a-project.md", "How to add a new target app (fields, context files, denylist).", "You", "S1", "Registry fields change"],
+
+  ["Per ticket", "Intake record", "artifacts · kind=intake", "Original report, attachments, transcript, injection score.", "Agent", "S1", "Once per ticket"],
+  ["Per ticket", "Triage note", "artifacts · kind=triage", "Type, severity, area, completeness, duplicate link, questions asked.", "Agent", "S2", "Each triage pass"],
+  ["Per ticket", "Diagnosis report", "artifacts · kind=diagnosis", "Root cause, evidence (file:line), fix plan, risk, confidence.", "Agent", "S3", "Each diagnosis or revision"],
+  ["Per ticket", "Gate decisions", "approvals table", "Who approved/rejected, when, and any note.", "You", "S3", "Each gate"],
+  ["Per ticket", "Change summary", "artifacts · kind=patch + PR body", "What changed, why, files touched, checks run.", "Agent", "S4", "Each developer attempt"],
+  ["Per ticket", "QA report", "artifacts · kind=qa + PR comment", "CI jobs, outcomes, retry history.", "Agent", "S5", "Each CI run"],
+  ["Per ticket", "Reporter messages", "ticket_events · type=notify", "Every message sent to the reporter, by channel.", "Agent", "S6", "Each status update"],
+  ["Per ticket", "Cost & trace record", "llm_usage + LangSmith", "Tokens, $, model, prompt version, trace link.", "Auto", "S2", "Every LLM call"],
+
+  ["Target repo", "Pull request description", "GitHub PR on target repo", "Ticket link, diagnosis summary, change summary, test notes.", "Agent", "S4", "PR opened / updated"],
+  ["Target repo", "QA PR comment", "GitHub PR comment", "CI outcome in plain language.", "Agent", "S5", "Each CI completion"],
+  ["Target repo", "BACKLOG.md entry", "BACKLOG.md in target repo", "Keeps the fantasy repo's single source of truth in sync.", "Auto", "S4", "Every agent PR (second commit, from a template)"],
+
+  ["Operations", "Environment variables", "docs/env.md + .env.example", "Every variable, where it's set, who needs it.", "You", "S0", "Variable added"],
+  ["Operations", "Runbooks", "docs/runbooks/*.md", "Stuck ticket, Groq quota hit, E2B down, revoke GitHub App, rotate keys.", "You", "S5", "After any incident"],
+  ["Operations", "Threat model", "docs/security/threat-model.md", "Assets, threats (STRIDE), mitigations.", "You", "S4", "New integration or tool"],
+  ["Operations", "WhatsApp templates", "docs/whatsapp-templates.md", "Template names, text, approval status.", "You", "S7", "Template submitted/approved"],
+  ["Operations", "Incident log", "docs/incidents.md", "What went wrong, impact, fix, follow-up.", "You", "S3", "Each incident"],
+
+  ["Quality", "Triage eval set", "evals/triage/*.json", "20+ sample tickets with expected labels.", "You", "S2", "New failure pattern found"],
+  ["Quality", "Replay benchmark cases", "evals/replay/cases.json", "10 historical bug-fix PRs with parent commits.", "You", "S6", "New good case found"],
+  ["Quality", "Eval reports", "evals/reports/YYYY-MM-DD.md", "Scores per run, model and prompt version.", "Auto", "S2", "Each eval run"],
+  ["Quality", "Metrics dashboard", "/admin/metrics", "Live: statuses, time to PR, cost, quota.", "Auto", "S6", "Real time"]
+];
+
+const cats = ["All", ...new Set(DOCS.map(d => d[0]))];
+let cat = "All";
+const ownerTag = o => `<span class="tag ${o === "Agent" ? "violet" : o === "Auto" ? "blue" : "green"}">${o}</span>`;
+function render() {
+  document.getElementById("filters").innerHTML = cats.map(c => `<button type="button" aria-pressed="${c === cat}" data-c="${c}">${c}</button>`).join("");
+  document.querySelectorAll("#filters button").forEach(b => b.onclick = () => { cat = b.dataset.c; render(); });
+  const rows = DOCS.filter(d => cat === "All" || d[0] === cat);
+  document.getElementById("rows").innerHTML = rows.map(([c, n, p, purpose, o, s, t]) =>
+    `<tr><td>${n}<span class="path">${p}</span></td><td>${purpose}</td><td>${ownerTag(o)}</td><td class="nowrap"><span class="tag">${s}</span></td><td>${t}</td></tr>`).join("");
+  document.getElementById("count").textContent = `${rows.length} of ${DOCS.length} documents shown.`;
+}
+render();
+</script>
+</body>
+</html>

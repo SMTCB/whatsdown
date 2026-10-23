@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsDown Functional Specification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@500;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topnav">
+  <div class="wrap">
+    <a class="brand" href="./"><span class="brand-dot" aria-hidden="true"></span>WhatsDown</a>
+    <nav aria-label="Documents">
+      <a href="./">Overview</a>
+      <a href="plan.html">Plan</a>
+      <a href="board.html">Board</a>
+      <a href="docs.html">Doc register</a>
+      <a href="functional.html" aria-current="page">Functional spec</a>
+      <a href="technical.html">Technical spec</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <p class="eyebrow">Document iv · Functional specification · v0.1</p>
+    <h1>What WhatsDown does</h1>
+    <p class="lede">This spec describes the platform's behaviour in plain language: who uses it, what happens to a ticket, what each agent is allowed to do, and where you stay in control. It contains no implementation detail; that lives in the <a href="technical.html">technical spec</a>.</p>
+  </section>
+
+  <div class="layout">
+    <aside class="toc" aria-label="On this page">
+      <p>On this page</p>
+      <ol>
+        <li><a href="#scope">Scope</a></li>
+        <li><a href="#actors">Actors</a></li>
+        <li><a href="#lifecycle">Ticket lifecycle</a></li>
+        <li><a href="#intake">Intake channels</a></li>
+        <li><a href="#agents">The five agents</a></li>
+        <li><a href="#gates">Approval gates</a></li>
+        <li><a href="#notify">Notifications</a></li>
+        <li><a href="#admin">Admin screens</a></li>
+        <li><a href="#fr">Requirements list</a></li>
+        <li><a href="#nfr">Quality requirements</a></li>
+        <li><a href="#out">Out of scope</a></li>
+        <li><a href="#accept">Acceptance</a></li>
+      </ol>
+    </aside>
+
+    <div class="content">
+      <h2 id="scope">1. Scope and goals</h2>
+      <p>WhatsDown receives problem reports about a registered app and runs them through a team of AI agents that end with a pull request you can merge. The first registered app is the Forza Fantasy League. The design doesn't depend on that app, so others can be added later.</p>
+      <div class="grid grid-3">
+        <div class="card"><h4>Goal 1 · Learn</h4><p>Understand how agentic workflows behave in practice: where they help, where they fail, what they cost.</p></div>
+        <div class="card"><h4>Goal 2 · Shorten fixes</h4><p>Go from a report to a reviewed PR without you reading the code first.</p></div>
+        <div class="card"><h4>Goal 3 · Stay safe</h4><p>Nothing reaches production without your two approvals. Agents never touch live data.</p></div>
+      </div>
+
+      <h2 id="actors">2. Actors</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Actor</th><th>Who</th><th>Can do</th></tr></thead>
+        <tbody>
+          <tr><td>Owner</td><td>You</td><td>Everything: register apps, see all tickets, approve or reject at both gates, change settings, see costs.</td></tr>
+          <tr><td>Reporter</td><td>You at first; later, league players on the WhatsApp allowlist</td><td>Report a problem, answer follow-up questions, receive status updates. Cannot see other people's tickets.</td></tr>
+          <tr><td>Agents</td><td>Triage, Diagnostics, Developer, QA, Communicator</td><td>Only what's listed for each in <a href="#agents">section 5</a>.</td></tr>
+          <tr><td>External systems</td><td>GitHub, the target repo's CI, WhatsApp, email</td><td>Send events into WhatsDown (CI result, merge, incoming message).</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2 id="lifecycle">3. Ticket lifecycle</h2>
+      <p>A ticket is always in exactly one status. Every change of status is written to the ticket's history with a timestamp and the cause.</p>
+      <div class="figure">
+        <svg viewBox="0 0 870 305" role="img" aria-labelledby="lc-t lc-d" font-family="Source Sans 3, system-ui, sans-serif" font-size="13">
+          <title id="lc-t">Ticket status diagram</title>
+          <desc id="lc-d">Main path: new, triaged, diagnosing, awaiting plan approval, patching, in QA, awaiting merge, merged, notified, closed. Side paths: needs info loops back to new; duplicate ends; plan rejection goes straight to closed; QA failure loops to patching; any step can go to failed.</desc>
+          <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6b736f"/></marker></defs>
+          <g stroke="#6b736f" stroke-width="1.5" fill="none" marker-end="url(#ah)">
+            <path d="M110 70H150"/><path d="M250 70H290"/><path d="M390 70H430"/><path d="M570 70H610"/>
+            <path d="M710 70H750"/><path d="M800 95V145"/><path d="M710 170H672"/><path d="M570 170H532"/><path d="M450 170H432"/>
+            <path d="M45 95V243"/><path d="M75 245V97"/>
+            <path d="M100 95L180 243"/>
+            <path d="M450 95L410 143"/>
+            <path d="M790 45C790 12 680 12 672 43"/>
+            <path d="M640 95L560 243" stroke-dasharray="4 4"/>
+          </g>
+          <g font-weight="600" text-anchor="middle">
+            <rect x="10" y="45" width="100" height="50" rx="8" fill="#fff" stroke="#cfccc1"/><text x="60" y="75">new</text>
+            <rect x="150" y="45" width="100" height="50" rx="8" fill="#fff" stroke="#cfccc1"/><text x="200" y="75">triaged</text>
+            <rect x="290" y="45" width="100" height="50" rx="8" fill="#fff" stroke="#cfccc1"/><text x="340" y="75">diagnosing</text>
+            <rect x="430" y="45" width="140" height="50" rx="8" fill="#fbf0dc" stroke="#f0d6a8"/><text x="500" y="67" fill="#a15c07">awaiting_plan</text><text x="500" y="83" fill="#a15c07">_approval · Gate 1</text>
+            <rect x="610" y="45" width="100" height="50" rx="8" fill="#fff" stroke="#cfccc1"/><text x="660" y="75">patching</text>
+            <rect x="750" y="45" width="100" height="50" rx="8" fill="#fff" stroke="#cfccc1"/><text x="800" y="75">in_qa</text>
+            <rect x="710" y="145" width="140" height="50" rx="8" fill="#fbf0dc" stroke="#f0d6a8"/><text x="780" y="167" fill="#a15c07">awaiting_merge</text><text x="780" y="183" fill="#a15c07">Gate 2</text>
+            <rect x="570" y="145" width="100" height="50" rx="8" fill="#fff" stroke="#cfccc1"/><text x="620" y="175">merged</text>
+            <rect x="450" y="145" width="80" height="50" rx="8" fill="#fff" stroke="#cfccc1"/><text x="490" y="175">notified</text>
+            <rect x="350" y="145" width="80" height="50" rx="8" fill="#e3f3ea" stroke="#bfe3cf"/><text x="390" y="175" fill="#0a5c3b">closed</text>
+            <rect x="10" y="245" width="110" height="50" rx="8" fill="#e6eff9" stroke="#c4d8ef"/><text x="65" y="275" fill="#1d5fa8">needs_info</text>
+            <rect x="150" y="245" width="100" height="50" rx="8" fill="#f0efe9" stroke="#cfccc1"/><text x="200" y="275">duplicate</text>
+            <rect x="460" y="245" width="140" height="50" rx="8" fill="#fdecea" stroke="#f5c6c1"/><text x="530" y="268" fill="#b42318">failed</text><text x="530" y="284" font-weight="400" font-size="12" fill="#b42318">(from any step)</text>
+          </g>
+          <g font-size="12" fill="#4a524e">
+            <text x="732" y="14" text-anchor="middle">CI fails · retry ≤2</text>
+            <text x="82" y="175">reporter</text><text x="82" y="190">answers</text>
+            <text x="420" y="118" text-anchor="end">rejected</text>
+            <text x="135" y="215" text-anchor="end">dup</text>
+          </g>
+        </svg>
+        <p class="figcap">Amber = waits for you. Blue = waits for the reporter. QA can send a ticket back to patching up to two times before it fails.</p>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Status</th><th>Meaning</th><th>Leaves when</th></tr></thead>
+        <tbody>
+          <tr><td><code>new</code></td><td>Report received and screened.</td><td>Triage finishes.</td></tr>
+          <tr><td><code>needs_info</code></td><td>Report is incomplete; a question was sent to the reporter.</td><td>Reporter answers (back to <code>new</code>) or 7 days pass (<code>closed</code>).</td></tr>
+          <tr><td><code>duplicate</code></td><td>Matches an open ticket; reporter is linked to it.</td><td>Final.</td></tr>
+          <tr><td><code>triaged</code></td><td>Classified (type, severity, area).</td><td>Diagnostics starts.</td></tr>
+          <tr><td><code>diagnosing</code></td><td>Diagnostics agent is reading the code.</td><td>Report ready, or the budget is exhausted (<code>failed</code>).</td></tr>
+          <tr><td><code>awaiting_plan_approval</code></td><td>Gate 1. You review the diagnosis and fix plan.</td><td>You approve, reject or ask for a revision.</td></tr>
+          <tr><td><code>patching</code></td><td>Developer agent writes the change in the sandbox.</td><td>PR opened, or guard blocks it (<code>failed</code>).</td></tr>
+          <tr><td><code>in_qa</code></td><td>The target repo's CI is running on the PR.</td><td>CI passes, or fails after 2 retries.</td></tr>
+          <tr><td><code>awaiting_merge</code></td><td>Gate 2. The PR is green and waits for your merge on GitHub.</td><td>You merge, or close the PR.</td></tr>
+          <tr><td><code>merged</code></td><td>Your merge was detected; Vercel deploys the app.</td><td>Communicator sends the update.</td></tr>
+          <tr><td><code>notified</code></td><td>Reporter told the fix is live.</td><td>Reporter confirms or 3 days pass.</td></tr>
+          <tr><td><code>closed</code></td><td>Done.</td><td>Final (you can reopen).</td></tr>
+          <tr><td><code>failed</code></td><td>Stopped by a limit or error. Reason recorded.</td><td>You retry from the last good step, or close.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2 id="intake">4. Intake channels</h2>
+      <h3>4.1 Web form (Sprint 1)</h3>
+      <ul>
+        <li>Fields: app (pre-selected), what happened, what you expected, steps, page or screen, optional screenshots (max 3, 5&nbsp;MB each), contact preference.</li>
+        <li>You must be signed in (magic link) to submit.</li>
+        <li>Once you submit, you see the ticket number and a link to its page.</li>
+      </ul>
+      <h3>4.2 WhatsApp (Sprint 7)</h3>
+      <ul>
+        <li>Only numbers on the allowlist are answered. Other numbers are ignored and logged.</li>
+        <li>The conversation is guided. The bot asks for the missing pieces one at a time (what, where, when) and then confirms with a short summary before it creates the ticket.</li>
+        <li>Photos are attached to the ticket. Voice notes are transcribed and the transcript is shown on the ticket.</li>
+        <li>Reply <b>STATUS</b> to get the state of your latest ticket, or <b>STOP</b> to opt out.</li>
+        <li>Messages more than 24 hours after the reporter's last message use an approved template (WhatsApp rule).</li>
+      </ul>
+      <div class="callout info"><strong>Screening</strong><p>Every report, on any channel, is first checked for prompt-injection attempts, such as text that tries to instruct the agents. Flagged reports go to <code>needs_info</code> with a note for you. The agents never see that text as instructions.</p></div>
+
+      <h2 id="agents">5. The five agents</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Agent</th><th>Job</th><th>Allowed to</th><th>Never</th><th>Output</th></tr></thead>
+        <tbody>
+          <tr><td>Triage</td><td>Classify, check completeness, find duplicates.</td><td>Read the ticket and open tickets; ask the reporter one question.</td><td>Read code.</td><td>Triage note</td></tr>
+          <tr><td>Diagnostics</td><td>Find the root cause and propose a fix.</td><td>Read and search the target repo in a sandbox; run read-only commands and unit tests.</td><td>Edit files; touch live data.</td><td>Diagnosis report (cause, evidence, plan, risk, confidence)</td></tr>
+          <tr><td>Developer</td><td>Implement the approved plan.</td><td>Edit files in a sandbox branch; run lint, build and unit tests.</td><td>Change protected paths (migrations, edge functions, CI, packages, mobile); exceed 400 lines; push to <code>main</code>.</td><td>Branch + PR + change summary</td></tr>
+          <tr><td>QA</td><td>Judge the CI result.</td><td>Read CI results; send the work back to Developer with the failure.</td><td>Mark a red PR as green.</td><td>QA report + PR comment</td></tr>
+          <tr><td>Communicator</td><td>Keep the reporter informed.</td><td>Send short updates by the reporter's channel.</td><td>Share code, internal notes or other people's data.</td><td>Reporter messages</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2 id="gates">6. Approval gates</h2>
+      <div class="grid grid-2">
+        <div class="card">
+          <span class="tag amber">Gate 1 · Plan approval</span>
+          <h3>Before any code is written</h3>
+          <p>The ticket page shows the diagnosis: the cause in plain language, the evidence as links to file lines, the proposed change, the risk and the confidence. You choose one of:</p>
+          <ul>
+            <li><b>Approve:</b> the Developer agent starts.</li>
+            <li><b>Revise:</b> you add a note and Diagnostics tries again (max 3 rounds).</li>
+            <li><b>Reject:</b> the ticket is closed and the reporter is told.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="tag amber">Gate 2 · Merge</span>
+          <h3>Before anything reaches users</h3>
+          <p>You review the PR on GitHub, including the Vercel preview link. Merging is your action and only yours. WhatsDown detects the merge and continues. Closing the PR without merging moves the ticket to <code>closed</code>.</p>
+          <p>Database migrations are never part of an agent PR. If a fix needs one, the plan says so and you apply it yourself.</p>
+        </div>
+      </div>
+
+      <h2 id="notify">7. Notifications</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Event</th><th>Reporter gets</th><th>You get</th></tr></thead>
+        <tbody>
+          <tr><td>Ticket created</td><td>"Got it, ticket #N."</td><td>—</td></tr>
+          <tr><td>Needs info</td><td>One clear question.</td><td>—</td></tr>
+          <tr><td>Gate 1 ready</td><td>"We found the cause, a fix is being reviewed."</td><td>Email with link to the ticket.</td></tr>
+          <tr><td>PR green (Gate 2)</td><td>—</td><td>Email with PR and preview links.</td></tr>
+          <tr><td>Merged and deployed</td><td>"Fixed! Please check and reply if it's still wrong."</td><td>—</td></tr>
+          <tr><td>Failed or rejected</td><td>Friendly note that it needs a human look.</td><td>Email with the reason.</td></tr>
+          <tr><td>Budget 80% used</td><td>—</td><td>Email warning.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Reporter messages are short, contain no technical jargon, and are written in the language the reporter used.</p>
+
+      <h2 id="admin">8. Admin screens</h2>
+      <dl class="kv">
+        <dt>Tickets</dt><dd>List with status filter, search, age and cost per ticket.</dd>
+        <dt>Ticket page</dt><dd>Timeline of events, every agent report, gate buttons, PR link, cost and trace links.</dd>
+        <dt>Apps</dt><dd>Register an app: repo, default branch, context files, protected paths, CI checks to wait for, notification settings.</dd>
+        <dt>Reporters</dt><dd>WhatsApp allowlist: add or remove numbers, see opt-outs.</dd>
+        <dt>Metrics</dt><dd>Tickets by status, time to PR, gate approval rate, cost per ticket, model usage, benchmark scores.</dd>
+        <dt>Settings</dt><dd>Budget per ticket, retry limits, model per agent (from an allowed list), kill switch to pause all agents.</dd>
+      </dl>
+
+      <h2 id="fr">9. Functional requirements</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>ID</th><th>Requirement</th><th>Sprint</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">FR-01</td><td>The owner can register an app with repo, branch, context files and protected paths.</td><td>S1</td></tr>
+          <tr><td class="nowrap">FR-02</td><td>A signed-in user can submit a report via web form with up to 3 images.</td><td>S1</td></tr>
+          <tr><td class="nowrap">FR-03</td><td>Every status change is stored as an event with time and cause.</td><td>S1</td></tr>
+          <tr><td class="nowrap">FR-04</td><td>Every report is screened for prompt injection before any agent reads it.</td><td>S2</td></tr>
+          <tr><td class="nowrap">FR-05</td><td>Triage assigns type, severity, area and completeness to every ticket.</td><td>S2</td></tr>
+          <tr><td class="nowrap">FR-06</td><td>Triage links likely duplicates and asks for missing information.</td><td>S2</td></tr>
+          <tr><td class="nowrap">FR-07</td><td>Diagnostics produces a report with root cause, file-level evidence, plan, risk and confidence.</td><td>S3</td></tr>
+          <tr><td class="nowrap">FR-08</td><td>No code is changed before the owner approves the plan (Gate 1).</td><td>S3</td></tr>
+          <tr><td class="nowrap">FR-09</td><td>Each ticket stops when it hits its cost budget.</td><td>S3</td></tr>
+          <tr><td class="nowrap">FR-10</td><td>Developer changes are blocked if they touch protected paths or exceed the size limit.</td><td>S4</td></tr>
+          <tr><td class="nowrap">FR-11</td><td>Developer opens a PR from <code>agent/&lt;ticket&gt;</code> with a structured description.</td><td>S4</td></tr>
+          <tr><td class="nowrap">FR-12</td><td>QA waits for the target repo's CI and retries the fix up to 2 times on failure.</td><td>S5</td></tr>
+          <tr><td class="nowrap">FR-13</td><td>The ticket continues only after the owner merges the PR (Gate 2).</td><td>S5</td></tr>
+          <tr><td class="nowrap">FR-14</td><td>Reporter receives updates at the events in section 7, on their channel.</td><td>S6</td></tr>
+          <tr><td class="nowrap">FR-15</td><td>The owner can see cost, duration and outcome per ticket and in total.</td><td>S6</td></tr>
+          <tr><td class="nowrap">FR-16</td><td>Allowlisted WhatsApp numbers can open a ticket by text, photo or voice.</td><td>S7</td></tr>
+          <tr><td class="nowrap">FR-17</td><td>Reporters can ask STATUS and opt out with STOP.</td><td>S7</td></tr>
+          <tr><td class="nowrap">FR-18</td><td>The owner can pause all agents with one switch.</td><td>S3</td></tr>
+          <tr><td class="nowrap">FR-19</td><td>A failed ticket can be retried from its last successful step.</td><td>S5</td></tr>
+          <tr><td class="nowrap">FR-20</td><td>A second app can be registered and handled without code changes.</td><td>S8</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2 id="nfr">10. Quality requirements</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>ID</th><th>Area</th><th>Requirement</th></tr></thead>
+        <tbody>
+          <tr><td>NFR-01</td><td>Safety</td><td>Agents never hold production secrets, never run against the live database and never push to <code>main</code>.</td></tr>
+          <tr><td>NFR-02</td><td>Cost</td><td>Default budget of $1.50 per ticket; running total visible at all times.</td></tr>
+          <tr><td>NFR-03</td><td>Durability</td><td>A ticket can wait at a gate for weeks and resume exactly where it stopped.</td></tr>
+          <tr><td>NFR-04</td><td>Speed</td><td>Report to Gate 1 in under 10 minutes for a typical bug.</td></tr>
+          <tr><td>NFR-05</td><td>Traceability</td><td>Every agent decision links to its full trace and prompt version.</td></tr>
+          <tr><td>NFR-06</td><td>Privacy</td><td>Reporter phone numbers are visible only to the owner; never sent to the target repo.</td></tr>
+          <tr><td>NFR-07</td><td>Accessibility</td><td>Web screens meet WCAG 2.2 AA and work on a phone.</td></tr>
+          <tr><td>NFR-08</td><td>Running cost</td><td>Fits free tiers (Vercel Hobby, Supabase Free, Inngest, E2B credits) apart from LLM usage.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2 id="out">11. Out of scope (for now)</h2>
+      <ul>
+        <li>Agents applying database migrations or deploying edge functions.</li>
+        <li>Auto-merging, even for small fixes.</li>
+        <li>Feature requests beyond small changes; these are triaged and parked.</li>
+        <li>Multiple owners, teams or roles.</li>
+        <li>Channels other than web and WhatsApp (email intake, Slack, Discord).</li>
+        <li>Running end-to-end tests against production.</li>
+      </ul>
+
+      <h2 id="accept">12. Acceptance of the whole system</h2>
+      <ul class="check">
+        <li>A real bug reported on the web form ends as a merged PR with no code written by you.</li>
+        <li>A WhatsApp voice note produces a correct, complete ticket.</li>
+        <li>An injection attempt in a report is caught and does not affect agent behaviour.</li>
+        <li>A change to a protected path is blocked and explained.</li>
+        <li>The replay benchmark solves at least 4 of 10 historical bugs within budget.</li>
+        <li>Average cost per ticket is shown and stays under the budget.</li>
+      </ul>
+
+      <footer class="footer">WhatsDown · Functional specification v0.1 · 22 Oct 2026</footer>
+    </div>
+  </div>
+</main>
+</body>
+</html>

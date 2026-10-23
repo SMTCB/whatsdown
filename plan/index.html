@@ -1,0 +1,106 @@
+<title>WhatsDown Implementation Pack</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@500;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+
+<header class="topnav">
+  <div class="wrap">
+    <a class="brand" href="./"><span class="brand-dot" aria-hidden="true"></span>WhatsDown</a>
+    <nav aria-label="Documents">
+      <a href="./" aria-current="page">Overview</a>
+      <a href="plan.html">Plan</a>
+      <a href="board.html">Board</a>
+      <a href="docs.html">Doc register</a>
+      <a href="functional.html">Functional spec</a>
+      <a href="technical.html">Technical spec</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <p class="eyebrow">Implementation pack · v0.1 · 22 Oct 2026</p>
+    <h1>Build WhatsDown, one sprint at a time</h1>
+    <p class="lede">WhatsDown is an AI maintenance crew for your hobby apps. Someone reports a problem by web form or WhatsApp. Agents triage it, find the cause, write a fix, check it, and tell the reporter. You approve the plan and merge the fix. The first app it looks after is the Forza Fantasy League (<code>SMTCB/WCFantasyFootball</code>).</p>
+    <div class="meta-row">
+      <span class="tag green">9 sprints · ~1 week each</span>
+      <span class="tag blue">Next.js + Supabase + Vercel</span>
+      <span class="tag violet">LangGraph.js agents</span>
+      <span class="tag amber">2 human gates</span>
+    </div>
+  </section>
+
+  <h2 style="margin-top:8px">The five documents</h2>
+  <div class="grid grid-2">
+    <a class="card link" href="plan.html">
+      <span class="tag green">i</span>
+      <h3>Implementation plan</h3>
+      <p>The tech stack, how we'll work (agile, 1-week sprints), and each sprint's goal, stories, demo and exit criteria. Also covers the move from local development to GitHub and Vercel.</p>
+    </a>
+    <a class="card link" href="board.html">
+      <span class="tag green">ii</span>
+      <h3>Implementation board</h3>
+      <p>A kanban board of every backlog item. You can filter it by sprint. Click a card to see its acceptance criteria or move it to another column. Moves are remembered in your browser.</p>
+    </a>
+    <a class="card link" href="docs.html">
+      <span class="tag green">iii</span>
+      <h3>Documentation register</h3>
+      <p>Every document the project produces: who or what writes it, where it lives, when it's created, and what triggers an update. Includes the reports the agents write for each ticket.</p>
+    </a>
+    <a class="card link" href="functional.html">
+      <span class="tag green">iv</span>
+      <h3>Functional specification</h3>
+      <p>What the platform does, in plain language. Covers the actors, ticket lifecycle, web and WhatsApp intake, the five agents, the approval gates, notifications and admin screens.</p>
+    </a>
+    <a class="card link" href="technical.html">
+      <span class="tag green">v</span>
+      <h3>Technical specification</h3>
+      <p>How it's built: architecture, agent graph, data model, integrations (GitHub App, E2B, WhatsApp Cloud API), model routing and costs, security, environments and testing.</p>
+    </a>
+    <div class="card" style="background:var(--surface-2)">
+      <span class="tag">at a glance</span>
+      <h3>The flow</h3>
+      <div class="flow" style="margin-bottom:0">
+        <span class="step">Report</span><span class="arrow">→</span>
+        <span class="step">Triage</span><span class="arrow">→</span>
+        <span class="step">Diagnose</span><span class="arrow">→</span>
+        <span class="step gate">You approve</span><span class="arrow">→</span>
+        <span class="step">Fix + PR</span><span class="arrow">→</span>
+        <span class="step">QA (CI)</span><span class="arrow">→</span>
+        <span class="step gate">You merge</span><span class="arrow">→</span>
+        <span class="step">Notify</span>
+      </div>
+    </div>
+  </div>
+
+  <h2>Decisions already made</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Topic</th><th>Decision</th></tr></thead>
+      <tbody>
+        <tr><td>Purpose</td><td>A hobby and learning project. Build it, measure how well it works, iterate.</td></tr>
+        <tr><td>Approver & tester</td><td>You, alone, at first. League users join later through WhatsApp.</td></tr>
+        <tr><td>Hosting</td><td>Vercel (app), Supabase (a <b>new, separate</b> project for the database), GitHub repo auto-deployed by Vercel.</td></tr>
+        <tr><td>Way of working</td><td>Build locally first, push to GitHub at the end of Sprint 0, then deploy every merge to <code>main</code> through Vercel.</td></tr>
+        <tr><td>Agents</td><td>LangGraph.js. State is saved in Postgres, so a ticket can pause for days and pick up where it left off.</td></tr>
+        <tr><td>Models</td><td>Groq's free models handle the light work: triage, messages, the injection screen and voice notes. Claude handles diagnosis and coding.</td></tr>
+        <tr><td>Code sandbox</td><td>E2B. The agents never run code on Vercel or against your live database.</td></tr>
+        <tr><td>Intake</td><td>Web form first (Sprint 1). WhatsApp Cloud API with a test number in Sprint 7.</td></tr>
+        <tr><td>Notifications</td><td>Sent automatically. At first the only recipient is you.</td></tr>
+        <tr><td>BACKLOG.md</td><td>Every agent PR on the fantasy repo also adds a 🟡 entry at the top of its <code>BACKLOG.md</code>, in the repo's own format. WhatsDown writes this entry from a template, not the AI model.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Open items to settle</h2>
+  <div class="grid grid-2">
+    <div class="callout warn" style="margin:0"><strong>Supabase project slots</strong><p>The free plan allows two active projects, and the fantasy app already uses one. WhatsDown takes the second, so a third hobby app would need a paid plan or a paused project.</p></div>
+    <div class="callout info" style="margin:0"><strong>Groq free-tier limits</strong><p>The figures published on the docs page are for the Developer plan. Check your own free limits in the Groq console under Settings → Limits before Sprint 2.</p></div>
+    <div class="callout info" style="margin:0"><strong>When to hand over keys</strong><p>Groq is needed in Sprint 2, Claude in Sprint 3, and E2B and the GitHub App in Sprint 0 (spike). Keys go into <code>.env.local</code> and Vercel env vars, never into chat or the repo.</p></div>
+  </div>
+
+  <footer class="footer">WhatsDown implementation pack. Drafted with Claude, 22 Oct 2026. Light-mode document set.</footer>
+</main>

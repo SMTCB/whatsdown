@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsDown Technical Specification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@500;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topnav">
+  <div class="wrap">
+    <a class="brand" href="./"><span class="brand-dot" aria-hidden="true"></span>WhatsDown</a>
+    <nav aria-label="Documents">
+      <a href="./">Overview</a>
+      <a href="plan.html">Plan</a>
+      <a href="board.html">Board</a>
+      <a href="docs.html">Doc register</a>
+      <a href="functional.html">Functional spec</a>
+      <a href="technical.html" aria-current="page">Technical spec</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <p class="eyebrow">Document v · Technical specification · v0.1</p>
+    <h1>How WhatsDown is built</h1>
+    <p class="lede">This spec covers the architecture, agent graph, data model, integrations, model routing, security and delivery pipeline. Each section ends with the decision it depends on, so you can see what would change if that decision changed.</p>
+  </section>
+
+  <div class="layout">
+    <aside class="toc" aria-label="On this page">
+      <p>On this page</p>
+      <ol>
+        <li><a href="#arch">Architecture</a></li>
+        <li><a href="#stack">Components</a></li>
+        <li><a href="#graph">Agent graph</a></li>
+        <li><a href="#durable">Durable execution</a></li>
+        <li><a href="#data">Data model</a></li>
+        <li><a href="#github">GitHub integration</a></li>
+        <li><a href="#sandbox">Sandbox (E2B)</a></li>
+        <li><a href="#whatsapp">WhatsApp</a></li>
+        <li><a href="#models">Model routing</a></li>
+        <li><a href="#security">Security</a></li>
+        <li><a href="#env">Environment variables</a></li>
+        <li><a href="#repo">Repo structure</a></li>
+        <li><a href="#deploy">Deploy pipeline</a></li>
+        <li><a href="#testing">Testing</a></li>
+        <li><a href="#limits">Limits</a></li>
+      </ol>
+    </aside>
+
+    <div class="content">
+      <h2 id="arch">1. Architecture</h2>
+      <div class="figure">
+        <svg viewBox="0 0 900 420" role="img" aria-labelledby="ar-t ar-d" font-family="Source Sans 3, system-ui, sans-serif" font-size="13">
+          <title id="ar-t">System architecture</title>
+          <desc id="ar-d">Reporters reach the Next.js app on Vercel through the web form or WhatsApp. The app writes to Supabase and sends events to Inngest, which runs the LangGraph agents. Agents call Groq and Claude, run code in E2B, and open pull requests through the GitHub App. CI results and merges come back as webhooks.</desc>
+          <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6b736f"/></marker></defs>
+          <!-- zones -->
+          <rect x="10" y="10" width="150" height="400" rx="10" fill="#f0efe9"/>
+          <text x="85" y="34" text-anchor="middle" font-weight="700" fill="#4a524e">Reporters</text>
+          <rect x="190" y="10" width="420" height="400" rx="10" fill="#e3f3ea"/>
+          <text x="400" y="34" text-anchor="middle" font-weight="700" fill="#0a5c3b">WhatsDown (Vercel + Supabase + Inngest)</text>
+          <rect x="640" y="10" width="250" height="400" rx="10" fill="#f0efe9"/>
+          <text x="765" y="34" text-anchor="middle" font-weight="700" fill="#4a524e">External services</text>
+
+          <g font-weight="600" text-anchor="middle">
+            <rect x="30" y="70" width="110" height="44" rx="8" fill="#fff" stroke="#cfccc1"/><text x="85" y="97">Web form</text>
+            <rect x="30" y="150" width="110" height="44" rx="8" fill="#fff" stroke="#cfccc1"/><text x="85" y="177">WhatsApp</text>
+            <rect x="30" y="300" width="110" height="44" rx="8" fill="#fbf0dc" stroke="#f0d6a8"/><text x="85" y="320" fill="#a15c07">You (owner)</text><text x="85" y="336" font-weight="400" font-size="12" fill="#a15c07">gates</text>
+
+            <rect x="210" y="60" width="180" height="140" rx="8" fill="#fff" stroke="#cfccc1"/>
+            <text x="300" y="84">Next.js app</text>
+            <text x="300" y="106" font-weight="400" font-size="12">UI · /api/report</text>
+            <text x="300" y="124" font-weight="400" font-size="12">/api/webhooks/whatsapp</text>
+            <text x="300" y="142" font-weight="400" font-size="12">/api/webhooks/github</text>
+            <text x="300" y="160" font-weight="400" font-size="12">/api/inngest</text>
+            <text x="300" y="178" font-weight="400" font-size="12">admin + gate actions</text>
+
+            <rect x="420" y="60" width="170" height="140" rx="8" fill="#fff" stroke="#cfccc1"/>
+            <text x="505" y="84">Inngest functions</text>
+            <text x="505" y="106" font-weight="400" font-size="12">ticket/run (step loop)</text>
+            <text x="505" y="124" font-weight="400" font-size="12">LangGraph.js graph</text>
+            <text x="505" y="142" font-weight="400" font-size="12">5 agent nodes</text>
+            <text x="505" y="160" font-weight="400" font-size="12">timeouts · crons</text>
+
+            <rect x="210" y="250" width="380" height="130" rx="8" fill="#fff" stroke="#cfccc1"/>
+            <text x="400" y="274">Supabase (project: whatsdown)</text>
+            <text x="300" y="300" font-weight="400" font-size="12">Postgres: tickets, events,</text>
+            <text x="300" y="317" font-weight="400" font-size="12">artifacts, approvals, llm_usage</text>
+            <text x="300" y="334" font-weight="400" font-size="12">LangGraph checkpoints</text>
+            <text x="500" y="300" font-weight="400" font-size="12">Auth (magic link)</text>
+            <text x="500" y="317" font-weight="400" font-size="12">Storage (attachments)</text>
+            <text x="500" y="334" font-weight="400" font-size="12">pg_trgm · pgvector</text>
+
+            <rect x="660" y="55" width="210" height="44" rx="8" fill="#fff" stroke="#cfccc1"/><text x="765" y="82">Groq · Claude APIs</text>
+            <rect x="660" y="115" width="210" height="44" rx="8" fill="#fff" stroke="#cfccc1"/><text x="765" y="142">E2B sandbox</text>
+            <rect x="660" y="175" width="210" height="60" rx="8" fill="#fff" stroke="#cfccc1"/><text x="765" y="199">GitHub (target repo)</text><text x="765" y="219" font-weight="400" font-size="12">App · PRs · Actions CI</text>
+            <rect x="660" y="251" width="210" height="44" rx="8" fill="#fff" stroke="#cfccc1"/><text x="765" y="278">Vercel (target app)</text>
+            <rect x="660" y="311" width="210" height="44" rx="8" fill="#fff" stroke="#cfccc1"/><text x="765" y="338">Resend · LangSmith</text>
+          </g>
+
+          <g stroke="#6b736f" stroke-width="1.5" fill="none" marker-end="url(#a2)">
+            <path d="M140 92H208"/><path d="M140 172H208"/>
+            <path d="M140 322C180 322 190 190 208 180"/>
+            <path d="M390 130H418"/>
+            <path d="M300 200V248"/><path d="M505 200V248"/>
+            <path d="M590 80H658"/><path d="M590 137H658"/><path d="M590 190H658"/>
+            <path d="M660 220C630 220 620 250 395 200" stroke-dasharray="4 4"/>
+            <path d="M765 235V249"/>
+            <path d="M590 175C620 175 630 333 658 333"/>
+          </g>
+          <text x="610" y="242" font-size="11" fill="#4a524e" text-anchor="middle">CI + merge webhooks</text>
+        </svg>
+        <p class="figcap">Everything WhatsDown owns sits in the green zone. Agents reach external services only through the Inngest functions; the browser never calls them directly.</p>
+      </div>
+
+      <h2 id="stack">2. Components</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Layer</th><th>Choice</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Language</td><td>TypeScript (strict), Node 24</td><td>One language for UI, API and agents.</td></tr>
+          <tr><td>Web app</td><td>Next.js 15 App Router + Tailwind 4</td><td>Server components; route handlers for webhooks.</td></tr>
+          <tr><td>Hosting</td><td>Vercel Hobby</td><td>Auto-deploy from GitHub <code>main</code>; previews per PR.</td></tr>
+          <tr><td>Database</td><td>Supabase Postgres (new project <code>whatsdown</code>)</td><td>RLS on every table; owner-only by default.</td></tr>
+          <tr><td>Auth / files</td><td>Supabase Auth (magic link), Storage</td><td>Private bucket <code>attachments</code>, signed URLs.</td></tr>
+          <tr><td>Agents</td><td>LangGraph.js + <code>@langchain/langgraph-checkpoint-postgres</code></td><td>Graph state saved after every node.</td></tr>
+          <tr><td>Durable runs</td><td>Inngest</td><td>Event-driven steps; retries; sleeps; crons. Fallback: Vercel Cron + queue table.</td></tr>
+          <tr><td>Code sandbox</td><td>E2B</td><td>Fresh microVM per agent session; no prod secrets.</td></tr>
+          <tr><td>GitHub</td><td>GitHub App <code>whatsdown-bot</code> via Octokit</td><td>Short-lived installation tokens.</td></tr>
+          <tr><td>LLMs</td><td><code>groq-sdk</code> + <code>@anthropic-ai/sdk</code> behind <code>lib/llm</code></td><td>Native SDKs, one router with usage logging.</td></tr>
+          <tr><td>Messaging</td><td>WhatsApp Cloud API (test number), Resend (email)</td><td></td></tr>
+          <tr><td>Validation</td><td>Zod</td><td>All inputs, tool args and agent outputs.</td></tr>
+          <tr><td>Observability</td><td>LangSmith traces + <code>llm_usage</code> table</td><td>Trace link stored per agent run.</td></tr>
+          <tr><td>Testing / CI</td><td>Vitest, Playwright, GitHub Actions</td><td>CI: typecheck, lint, unit, e2e (local Supabase).</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2 id="graph">3. Agent graph (LangGraph)</h2>
+      <div class="figure">
+        <svg viewBox="0 0 900 230" role="img" aria-labelledby="g-t g-d" font-family="Source Sans 3, system-ui, sans-serif" font-size="13">
+          <title id="g-t">LangGraph nodes and edges</title>
+          <desc id="g-d">screen, triage, diagnose, gate1 interrupt, develop, guard, open_pr, qa wait interrupt, qa judge, gate2 interrupt, communicate. Conditional edges: triage to needs_info interrupt or end; gate1 revise back to diagnose; qa fail back to develop; guard fail to failed.</desc>
+          <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6b736f"/></marker></defs>
+          <g font-weight="600" text-anchor="middle">
+            <rect x="10" y="90" width="70" height="40" rx="6" fill="#fff" stroke="#cfccc1"/><text x="45" y="115">screen</text>
+            <rect x="100" y="90" width="70" height="40" rx="6" fill="#fff" stroke="#cfccc1"/><text x="135" y="115">triage</text>
+            <rect x="190" y="90" width="80" height="40" rx="6" fill="#fff" stroke="#cfccc1"/><text x="230" y="115">diagnose</text>
+            <rect x="290" y="90" width="70" height="40" rx="6" fill="#fbf0dc" stroke="#f0d6a8"/><text x="325" y="115" fill="#a15c07">gate1 ⏸</text>
+            <rect x="380" y="90" width="80" height="40" rx="6" fill="#fff" stroke="#cfccc1"/><text x="420" y="115">develop</text>
+            <rect x="480" y="90" width="64" height="40" rx="6" fill="#fff" stroke="#cfccc1"/><text x="512" y="115">guard</text>
+            <rect x="564" y="90" width="70" height="40" rx="6" fill="#fff" stroke="#cfccc1"/><text x="599" y="115">open_pr</text>
+            <rect x="654" y="90" width="70" height="40" rx="6" fill="#e6eff9" stroke="#c4d8ef"/><text x="689" y="115" fill="#1d5fa8">ci_wait ⏸</text>
+            <rect x="744" y="90" width="64" height="40" rx="6" fill="#fff" stroke="#cfccc1"/><text x="776" y="115">qa</text>
+            <rect x="744" y="170" width="70" height="40" rx="6" fill="#fbf0dc" stroke="#f0d6a8"/><text x="779" y="195" fill="#a15c07">gate2 ⏸</text>
+            <rect x="620" y="170" width="100" height="40" rx="6" fill="#fff" stroke="#cfccc1"/><text x="670" y="195">communicate</text>
+            <rect x="100" y="170" width="90" height="40" rx="6" fill="#e6eff9" stroke="#c4d8ef"/><text x="145" y="195" fill="#1d5fa8">needs_info ⏸</text>
+            <rect x="480" y="170" width="64" height="40" rx="6" fill="#fdecea" stroke="#f5c6c1"/><text x="512" y="195" fill="#b42318">failed</text>
+          </g>
+          <g stroke="#6b736f" stroke-width="1.5" fill="none" marker-end="url(#a3)">
+            <path d="M80 110H98"/><path d="M170 110H188"/><path d="M270 110H288"/><path d="M360 110H378"/>
+            <path d="M460 110H478"/><path d="M544 110H562"/><path d="M634 110H652"/><path d="M724 110H742"/>
+            <path d="M776 130V168"/><path d="M744 190H722"/>
+            <path d="M125 130V168"/><path d="M150 170V132"/>
+            <path d="M512 130V168"/>
+            <path d="M325 90C325 50 230 50 230 88"/>
+            <path d="M776 90C776 35 420 35 420 88"/>
+          </g>
+          <g font-size="11.5" fill="#4a524e" text-anchor="middle">
+            <text x="278" y="48">revise</text>
+            <text x="598" y="30">CI red · retry ≤2</text>
+            <text x="540" y="152" text-anchor="start">blocked</text>
+          </g>
+        </svg>
+        <p class="figcap">⏸ = <code>interrupt()</code>. The graph saves its state and the Inngest run ends; an event later resumes it with the same <code>thread_id</code> (= ticket id).</p>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Node</th><th>Model / tool</th><th>Writes</th></tr></thead>
+        <tbody>
+          <tr><td><code>screen</code></td><td>Prompt Guard 2 (86M) on Groq</td><td>injection score in intake artifact</td></tr>
+          <tr><td><code>triage</code></td><td>gpt-oss-20b; pg_trgm duplicate search</td><td>triage artifact; status</td></tr>
+          <tr><td><code>diagnose</code></td><td>Claude Opus 5.5 (effort high) + read-only sandbox tools</td><td>diagnosis artifact</td></tr>
+          <tr><td><code>gate1</code></td><td>interrupt; resumed by <code>ticket/gate1.decided</code></td><td>approvals row</td></tr>
+          <tr><td><code>develop</code></td><td>Claude Opus 5.5 + write sandbox tools</td><td>patch artifact (diff)</td></tr>
+          <tr><td><code>guard</code></td><td>deterministic code: denylist, line cap, secret scan</td><td>pass / block reason</td></tr>
+          <tr><td><code>open_pr</code></td><td>GitHub App: push branch, open PR</td><td>PR number, branch</td></tr>
+          <tr><td><code>ci_wait</code></td><td>interrupt; resumed by <code>github/check_suite.completed</code></td><td>CI results</td></tr>
+          <tr><td><code>qa</code></td><td>gpt-oss-20b summarises failures</td><td>QA artifact; PR comment</td></tr>
+          <tr><td><code>gate2</code></td><td>interrupt; resumed by <code>github/pull_request.closed</code></td><td>merge record</td></tr>
+          <tr><td><code>communicate</code></td><td>gpt-oss-120b; WhatsApp / email sender</td><td>notify events</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2 id="durable">4. Durable execution</h2>
+      <p>Vercel functions stop after a few minutes. A diagnosis can take longer, and a ticket can wait days at a gate. The graph therefore runs in slices:</p>
+      <ol>
+        <li>An event (<code>ticket/created</code>, <code>ticket/gate1.decided</code>, <code>github/ci.completed</code>…) triggers the Inngest function <code>ticket/run</code>.</li>
+        <li>Each Inngest <code>step.run</code> calls <code>graph.invoke(input, {configurable:{thread_id: ticketId}})</code> with a ~240&nbsp;s budget. After a slice it calls <code>graph.invoke(null, …)</code> to continue from the last checkpoint.</li>
+        <li>When the graph hits <code>interrupt()</code>, the function ends. Nothing runs or costs money while waiting.</li>
+        <li>The resume event calls <code>graph.invoke(new Command({resume: payload}), …)</code>.</li>
+        <li>Inngest crons check for stuck tickets (no event in 24&nbsp;h) and expire <code>needs_info</code> after 7 days.</li>
+      </ol>
+      <div class="callout warn"><strong>Spike in Sprint 0</strong><p>The slice-and-resume pattern is validated first (WD-5/WD-6). If it fails, the fallback is Vercel Cron every minute draining a <code>jobs</code> table, recorded in ADR-002.</p></div>
+
+      <h2 id="data">5. Data model</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Table</th><th>Key columns</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>projects</code></td><td>id, name, repo_owner, repo_name, default_branch, installation_id, context_files text[], protected_paths text[], max_diff_lines, required_checks text[], budget_usd, backlog_entry bool, enabled</td><td>Registered target apps.</td></tr>
+          <tr><td><code>reporters</code></td><td>id, display_name, user_id → auth.users, phone_e164 (unique), allowlisted, opted_out, locale</td><td>People who can report.</td></tr>
+          <tr><td><code>tickets</code></td><td>id, number, project_id, reporter_id, channel (web|whatsapp), title, body, status (enum), type, severity, area, duplicate_of, pr_number, branch, cost_usd, retry_count, created_at, updated_at</td><td>One row per report.</td></tr>
+          <tr><td><code>ticket_events</code></td><td>id, ticket_id, type, from_status, to_status, actor (agent|owner|system|reporter), payload jsonb, created_at</td><td>Append-only history.</td></tr>
+          <tr><td><code>artifacts</code></td><td>id, ticket_id, kind (intake|triage|diagnosis|patch|qa), version, content jsonb, markdown, prompt_version, trace_url, created_at</td><td>Agent reports.</td></tr>
+          <tr><td><code>approvals</code></td><td>id, ticket_id, gate (1|2), decision (approve|revise|reject|merged|closed), note, decided_by, decided_at</td><td>Gate decisions.</td></tr>
+          <tr><td><code>llm_usage</code></td><td>id, ticket_id, node, provider, model, input_tokens, output_tokens, cache_read_tokens, cost_usd, latency_ms, created_at</td><td>Cost tracking.</td></tr>
+          <tr><td><code>whatsapp_messages</code></td><td>id, wa_message_id (unique), reporter_id, ticket_id, direction, type (text|image|audio|template), body, media_path, status, created_at</td><td>Message log; dedupes webhook retries.</td></tr>
+          <tr><td><code>checkpoints</code> (+ writes)</td><td>managed by the LangGraph Postgres saver</td><td>Graph state per thread.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Status changes go through one function (<code>transition(ticketId, to, cause)</code>), which checks the allowed transition, updates the ticket and inserts the event in one transaction.</p>
+
+      <h2 id="github">6. GitHub integration</h2>
+      <dl class="kv">
+        <dt>App</dt><dd><code>whatsdown-bot</code>, installed only on <code>SMTCB/WCFantasyFootball</code> (and later apps).</dd>
+        <dt>Permissions</dt><dd>Contents: read &amp; write · Pull requests: read &amp; write · Checks: read · Actions: read · Metadata: read. Nothing else.</dd>
+        <dt>Webhooks</dt><dd><code>check_suite</code>, <code>pull_request</code>, <code>pull_request_review</code>. Verified with <code>X-Hub-Signature-256</code>; dedupe on <code>X-GitHub-Delivery</code>.</dd>
+        <dt>Branches</dt><dd><code>agent/&lt;ticket-number&gt;-&lt;slug&gt;</code>. The app pushes the diff via the Git Data API, never the sandbox.</dd>
+        <dt>PR body</dt><dd>Ticket link · diagnosis summary · change summary · files · checks run in sandbox · "Generated by WhatsDown" footer.</dd>
+        <dt>BACKLOG.md</dt><dd>After the PR opens, the app pushes a second commit that inserts a <code>## 🟡 &lt;title&gt; (&lt;date&gt;) — PR #&lt;n&gt;, WhatsDown ticket #&lt;t&gt;</code> section just below the file's header. The section is built from a template using the diagnosis fields; the model never edits this file. The diff guard blocks <code>BACKLOG.md</code> in Developer diffs and allows it only in this commit. On a conflict, the app rebuilds the entry on the latest <code>main</code>. It can be turned off per project with <code>projects.backlog_entry</code>.</dd>
+        <dt>Protection</dt><dd>Branch protection on <code>main</code> stays as it is; the bot cannot merge.</dd>
+      </dl>
+
+      <h2 id="sandbox">7. Sandbox (E2B)</h2>
+      <div class="grid grid-2">
+        <div class="card"><h4>Read mode (Diagnostics)</h4><p>Shallow clone at the default branch, <code>npm ci</code>, tools: <code>list_files</code>, <code>read_file</code>, <code>search</code> (ripgrep), <code>git_log</code>, <code>run_tests</code> (allowlisted scripts). No write tool exposed.</p></div>
+        <div class="card"><h4>Write mode (Developer)</h4><p>Adds <code>write_file</code>, <code>apply_patch</code>, <code>run</code> (lint, build, vitest only). Output is <code>git diff</code>, returned to the app, guarded, then pushed by the GitHub App.</p></div>
+      </div>
+      <ul>
+        <li>Clone uses a read-only installation token that expires in 1 hour. No Supabase, Vercel or LLM keys enter the sandbox.</li>
+        <li>Network egress is limited to the npm registry and GitHub where E2B allows it.</li>
+        <li>Timeout 20 min per sandbox; killed after each node.</li>
+      </ul>
+
+      <h2 id="whatsapp">8. WhatsApp Cloud API</h2>
+      <ul>
+        <li><code>GET /api/webhooks/whatsapp</code> answers Meta's verification challenge with <code>WHATSAPP_VERIFY_TOKEN</code>.</li>
+        <li><code>POST</code> verifies <code>X-Hub-Signature-256</code> with the app secret, stores the message, returns 200 within 5&nbsp;s and hands off to Inngest (<code>whatsapp/message.received</code>).</li>
+        <li>A small conversation state machine (<code>collecting → confirming → created</code>) runs per reporter, using gpt-oss-20b to extract fields.</li>
+        <li>Media is downloaded via the Graph API into Storage. Audio is transcribed with <code>whisper-large-v3-turbo</code> on Groq.</li>
+        <li>Outbound: free-form text inside the 24&nbsp;h window; otherwise the approved template <code>ticket_update</code> with parameters.</li>
+      </ul>
+
+      <h2 id="models">9. Model routing and cost control</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Task</th><th>Primary</th><th>Fallback</th><th>Settings</th></tr></thead>
+        <tbody>
+          <tr><td>Injection screen</td><td><code>meta-llama/llama-prompt-guard-2-86m</code> (Groq)</td><td>block-and-review</td><td>threshold 0.5</td></tr>
+          <tr><td>Voice notes</td><td><code>whisper-large-v3-turbo</code> (Groq)</td><td>ask for text</td><td></td></tr>
+          <tr><td>Triage, QA summary, WhatsApp extraction</td><td><code>openai/gpt-oss-20b</code> (Groq)</td><td><code>claude-haiku-5-5</code></td><td>JSON output, Zod-validated</td></tr>
+          <tr><td>Reporter messages</td><td><code>openai/gpt-oss-120b</code> (Groq)</td><td><code>claude-haiku-5-5</code></td><td>≤ 400 chars</td></tr>
+          <tr><td>Diagnostics, Developer</td><td><code>claude-opus-5-5</code></td><td>—</td><td>adaptive thinking, effort high, streaming, prompt caching</td></tr>
+        </tbody>
+      </table></div>
+      <ul>
+        <li><b>Router:</b> <code>lib/llm.call({task, ticketId, …})</code> picks the model from the project settings, logs <code>llm_usage</code>, and checks the ticket budget before every call.</li>
+        <li><b>Caching:</b> the system prompt, tool definitions and the repo context files form a stable prefix with a cache breakpoint. Hits are verified via <code>cache_read_input_tokens</code>.</li>
+        <li><b>Budget:</b> $1.50 per ticket by default. At 80% the owner is emailed; at 100% the node stops and the ticket goes to <code>failed</code> with reason <code>budget</code>.</li>
+        <li><b>Experiment (S6):</b> run the replay benchmark with Sonnet 5.5 for Diagnostics/Developer and compare solve rate and cost with Opus 5.5.</li>
+      </ul>
+
+      <h2 id="security">10. Security</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Threat</th><th>Mitigation</th></tr></thead>
+        <tbody>
+          <tr><td>Prompt injection in a report</td><td>Prompt Guard screen; report text wrapped as untrusted data; agents have no tool that can reach secrets or prod.</td></tr>
+          <tr><td>Agent writes harmful code</td><td>Gate 1 plan review; diff guard denylist and 400-line cap; CI; Gate 2 human merge.</td></tr>
+          <tr><td>Secret leakage</td><td>No prod secrets in sandbox; secret scan on diffs; keys only in Vercel env and <code>.env.local</code>.</td></tr>
+          <tr><td>Forged webhooks</td><td>HMAC signature checks (GitHub, Meta, Inngest signing key); delivery-id dedupe.</td></tr>
+          <tr><td>Spam via WhatsApp</td><td>Allowlist; rate limit 10 messages/hour/number; ticket cap per day.</td></tr>
+          <tr><td>Runaway cost</td><td>Per-ticket budget; kill switch; Groq/Claude spending limits set in their consoles.</td></tr>
+          <tr><td>Data exposure</td><td>RLS owner-only; reporters see only their own tickets; phone numbers never sent to GitHub.</td></tr>
+        </tbody>
+      </table></div>
+      <p>Protected paths for the fantasy repo: <code>supabase/migrations/**</code>, <code>supabase/functions/**</code>, <code>.github/**</code>, <code>package*.json</code>, <code>ios/**</code>, <code>android/**</code>, <code>middleware.js</code>, <code>vercel.json</code>, <code>capacitor.config.ts</code>.</p>
+
+      <h2 id="env">11. Environment variables</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Variable</th><th>Used by</th><th>Needed from</th></tr></thead>
+        <tbody>
+          <tr><td><code>NEXT_PUBLIC_SUPABASE_URL</code>, <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code></td><td>Browser + server</td><td>S0</td></tr>
+          <tr><td><code>SUPABASE_SERVICE_ROLE_KEY</code></td><td>Server only (agents, webhooks)</td><td>S0</td></tr>
+          <tr><td><code>DATABASE_URL</code></td><td>LangGraph checkpointer (pooled connection)</td><td>S0</td></tr>
+          <tr><td><code>INNGEST_EVENT_KEY</code>, <code>INNGEST_SIGNING_KEY</code></td><td>Inngest (not needed locally with dev server)</td><td>S0</td></tr>
+          <tr><td><code>E2B_API_KEY</code></td><td>Sandbox</td><td>S0 (spike)</td></tr>
+          <tr><td><code>GITHUB_APP_ID</code>, <code>GITHUB_APP_PRIVATE_KEY</code>, <code>GITHUB_WEBHOOK_SECRET</code></td><td>GitHub App</td><td>S0 (spike)</td></tr>
+          <tr><td><code>GROQ_API_KEY</code></td><td>Light models, Prompt Guard, Whisper</td><td>S2</td></tr>
+          <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Diagnostics, Developer, fallback</td><td>S3</td></tr>
+          <tr><td><code>LANGSMITH_API_KEY</code>, <code>LANGSMITH_TRACING</code>, <code>LANGSMITH_PROJECT</code></td><td>Tracing</td><td>S2</td></tr>
+          <tr><td><code>RESEND_API_KEY</code>, <code>OWNER_EMAIL</code></td><td>Owner emails</td><td>S3</td></tr>
+          <tr><td><code>WHATSAPP_TOKEN</code>, <code>WHATSAPP_PHONE_NUMBER_ID</code>, <code>WHATSAPP_APP_SECRET</code>, <code>WHATSAPP_VERIFY_TOKEN</code></td><td>WhatsApp</td><td>S7</td></tr>
+          <tr><td><code>AGENTS_ENABLED</code></td><td>Kill switch (also in settings table)</td><td>S3</td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout risk"><strong>Never paste keys into chat or commit them</strong><p>Put them in <code>.env.local</code> (git-ignored) and in Vercel → Project → Settings → Environment Variables. <code>.env.example</code> lists the names only.</p></div>
+
+      <h2 id="repo">12. Repo structure</h2>
+<pre><code>whatsdown/
+├─ app/                    Next.js routes (UI, /api/report, /api/webhooks/*, /api/inngest)
+├─ components/             UI components
+├─ lib/
+│  ├─ db/                  Supabase clients, transition(), queries
+│  ├─ llm/                 router, providers (groq, anthropic), pricing, budget
+│  ├─ agents/              graph.ts, nodes/*.ts, state.ts
+│  ├─ tools/               sandbox + github tools (Zod schemas)
+│  ├─ guard/               diff guard, secret scan
+│  ├─ github/              app auth, webhooks, PR creation
+│  └─ whatsapp/            webhook, conversation, sender
+├─ inngest/                functions: ticket-run, timeouts, whatsapp
+├─ prompts/                triage.md, diagnose.md, develop.md, qa.md, communicate.md
+├─ supabase/migrations/    SQL migrations (applied by you)
+├─ evals/                  triage/, replay/, reports/
+├─ docs/                   adr/, sprints/, runbooks/, specs
+├─ tests/                  unit (vitest), e2e (playwright)
+├─ CLAUDE.md               rules for coding agents working on WhatsDown itself
+└─ .env.example</code></pre>
+
+      <h2 id="deploy">13. Deploy pipeline</h2>
+      <div class="flow">
+        <span class="step">Local (npm run dev + inngest dev + supabase local)</span><span class="arrow">→</span>
+        <span class="step">git push branch</span><span class="arrow">→</span>
+        <span class="step">GitHub Actions CI</span><span class="arrow">→</span>
+        <span class="step">Vercel preview</span><span class="arrow">→</span>
+        <span class="step gate">You merge PR</span><span class="arrow">→</span>
+        <span class="step">Vercel prod deploy</span>
+      </div>
+      <ul>
+        <li>Migrations: written locally, tested with <code>supabase db reset</code>, applied to the hosted project by you with <code>supabase db push</code>.</li>
+        <li>Inngest: Vercel integration syncs functions on each deploy.</li>
+        <li>Preview deployments use the same Supabase project but with <code>AGENTS_ENABLED=false</code> to avoid duplicate runs.</li>
+      </ul>
+
+      <h2 id="testing">14. Testing strategy</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Level</th><th>What</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td>Unit</td><td>transition rules, diff guard, router, budget, webhook signatures</td><td>Vitest, CI</td></tr>
+          <tr><td>Graph</td><td>Each node with mocked LLM and tools; interrupt / resume</td><td>Vitest, CI</td></tr>
+          <tr><td>E2E</td><td>Report form → ticket page → gate buttons (agents stubbed)</td><td>Playwright, CI with local Supabase</td></tr>
+          <tr><td>Evals</td><td>Triage set (labels), replay benchmark (10 historical PRs)</td><td>Manual run, reports in <code>evals/reports</code></td></tr>
+          <tr><td>Live smoke</td><td>One real ticket end-to-end per sprint from S5</td><td>Your demo</td></tr>
+        </tbody>
+      </table></div>
+
+      <h2 id="limits">15. Known limits</h2>
+      <ul>
+        <li>Vercel Hobby function time and Inngest free-tier step counts bound how long a slice can run and how many tickets per month fit.</li>
+        <li>Supabase free projects pause after a week without activity; a weekly Inngest cron pings the database.</li>
+        <li>The fantasy repo's full e2e suite (up to 60 min) runs only in its own CI, not in the sandbox.</li>
+        <li>Groq free-tier rate limits may trigger the Haiku fallback during bursts.</li>
+        <li>The WhatsApp test number can message only up to 5 verified recipients.</li>
+      </ul>
+
+      <footer class="footer">WhatsDown · Technical specification v0.1 · 22 Oct 2026</footer>
+    </div>
+  </div>
+</main>
+</body>
+</html>

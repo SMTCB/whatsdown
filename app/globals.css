@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+/* Light mode only. Tokens follow design-system/whatsdown/MASTER.md. */
+:root {
+  color-scheme: light;
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --ink: #0f172a;
+  --muted: #475569;
+  --subtle: #e9eef5;
+  --line: #cbd5e1;
+  --accent: #1e3a5f;
+  --accent-ink: #ffffff;
+  --link: #2563eb;
+  --ok: #166534;
+  --ok-bg: #dcfce7;
+  --warn: #92400e;
+  --warn-bg: #fef3c7;
+  --bad: #b91c1c;
+  --bad-bg: #fee2e2;
+  --ring: #1e3a5f;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body), system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading), system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+a {
+  color: var(--link);
+}
+
+:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+  }
+  .btn {
+    display: inline-flex;
+    min-height: 44px;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--line);
+    background: var(--card);
+    padding: 0 1rem;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    color: var(--ink);
+    transition: background-color 150ms ease, border-color 150ms ease;
+  }
+  .btn:hover {
+    background: var(--subtle);
+  }
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+  .btn-primary:hover {
+    background: #16304f;
+  }
+  .btn-danger {
+    color: var(--bad);
+    border-color: var(--bad);
+  }
+  .field {
+    width: 100%;
+    min-height: 44px;
+    border-radius: 0.5rem;
+    border: 1px solid var(--line);
+    background: var(--card);
+    padding: 0.5rem 0.75rem;
+  }
+  .label {
+    font-weight: 600;
+    font-size: 0.9375rem;
+  }
+  .hint {
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    background: var(--subtle);
+    padding: 0.125rem 0.625rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .alert-bad {
+    border: 1px solid var(--bad);
+    background: var(--bad-bg);
+    color: var(--bad);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.9375rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
