@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:live": "node --env-file=.env.local node_modules/vitest/vitest.mjs run --config vitest.live.config.ts"
   },
   "dependencies": {
     "next": "^15.5.28",
