@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { develop } from "@/lib/agents/develop";
+import { applyEdits, develop } from "@/lib/agents/develop";
 import { qa } from "@/lib/agents/qa";
 import { MemoryStore } from "@/lib/db/memory-store";
 import { FANTASY_PROTECTED_PATHS } from "@/lib/guard/diff-guard";
@@ -54,6 +54,48 @@ describe("develop", () => {
     await develop({ ...base, client, log: new MemoryUsageLog() }, ticket, "plan", new MemorySandbox(), policy, "2 tests failed");
     expect(client.requests[0]?.prompt).toContain("2 tests failed");
     expect(client.requests[0]?.system).toContain("untrusted");
+  });
+});
+
+describe("develop with edits", () => {
+  const ticket = { title: "Crash", body: "It crashes" };
+  const files = [{ path: "src/a.ts", content: "const a = 1;\nconst b = 2;\n" }];
+  const edit = (find: string, replace: string) => reply(JSON.stringify({ summary: "Fix", edits: [{ path: "src/a.ts", find, replace }] }));
+
+  it("applies a snippet edit to the full original file", async () => {
+    const sb = new MemorySandbox({ "src/a.ts": files[0]!.content });
+    const client = new FakeLlmClient([edit("const b = 2;", "const b = 3;")]);
+    const r = await develop({ ...base, client, log: new MemoryUsageLog() }, ticket, "plan", sb, policy, undefined, files);
+    expect(r.ok).toBe(true);
+    expect(sb.read("src/a.ts")).toBe("const a = 1;\nconst b = 3;\n");
+  });
+
+  it("fails clearly when the snippet is missing or ambiguous", async () => {
+    const run = async (find: string, content = files[0]!.content) => {
+      const client = new FakeLlmClient([edit(find, "x"), edit(find, "x")]);
+      return develop({ ...base, client, log: new MemoryUsageLog() }, ticket, "plan", new MemorySandbox(), policy, undefined, [{ path: "src/a.ts", content }]);
+    };
+    expect((await run("nope")).summary).toContain("snippet not found");
+    expect((await run("const", "const a;\nconst b;")).summary).toContain("more than once");
+  });
+
+  it("retries once with the error, and tolerates indentation drift", async () => {
+    const client = new FakeLlmClient([edit("nope", "x"), edit("const a = 1;", "const a = 9;")]);
+    const r = await develop({ ...base, client, log: new MemoryUsageLog() }, ticket, "plan", new MemorySandbox(), policy, undefined, [{ path: "src/a.ts", content: files[0]!.content }]);
+    expect(r.ok).toBe(true);
+    expect(client.requests).toHaveLength(2);
+    const src = "if (x) {\n    run();\n}\n";
+    const loose = applyEdits(new Map([["f", src]]), [{ path: "f", find: "run();", replace: "stop();" }]);
+    expect("files" in loose && loose.files.get("f")).toContain("stop();");
+    const drift = applyEdits(new Map([["f", src]]), [{ path: "f", find: "if (x) {\nrun();\n}", replace: "z" }]);
+    expect("files" in drift && drift.files.get("f")).toBe("z\n");
+  });
+
+  it("applyEdits chains edits on the same file and rejects unknown paths", () => {
+    const orig = new Map([["f", "abc"]]);
+    const ok = applyEdits(orig, [{ path: "f", find: "a", replace: "1" }, { path: "f", find: "c", replace: "3" }]);
+    expect("files" in ok && ok.files.get("f")).toBe("1b3");
+    expect(applyEdits(orig, [{ path: "g", find: "a", replace: "b" }])).toHaveProperty("error");
   });
 });
 

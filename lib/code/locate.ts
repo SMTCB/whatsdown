@@ -24,9 +24,9 @@ export const LOCATE_LIMITS = {
   maxDirs: 4,
   /** Above this many candidate paths the search first narrows to directories. */
   maxPathsPerStage: 250,
-  fileChars: 6_000,
-  docChars: 2_500,
-  totalChars: 14_000,
+  fileChars: 4_000,
+  docChars: 1_200,
+  totalChars: 9_000,
 };
 
 const DOC_PATHS = ["CLAUDE.md", "docs/DOCS_MAP.md", "README.md"];

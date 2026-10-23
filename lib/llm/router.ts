@@ -29,8 +29,8 @@ export const GROQ_ROUTES: Record<Task, Route> = {
   locate: { primary: "openai/gpt-oss-20b", fallback: "openai/gpt-oss-120b", effort: "medium" },
   qa_summary: { primary: "openai/gpt-oss-20b", fallback: "openai/gpt-oss-120b", effort: "low" },
   communicate: { primary: "openai/gpt-oss-20b", fallback: "openai/gpt-oss-120b", effort: "medium" },
-  diagnose: { primary: "openai/gpt-oss-120b", fallback: "openai/gpt-oss-20b", effort: "high" },
-  develop: { primary: "openai/gpt-oss-120b", fallback: "openai/gpt-oss-20b", effort: "high" },
+  diagnose: { primary: "openai/gpt-oss-120b", fallback: "openai/gpt-oss-20b", effort: "medium" },
+  develop: { primary: "openai/gpt-oss-120b", fallback: "openai/gpt-oss-20b", effort: "medium" },
 };
 
 /** Upgrade preset for once an Anthropic key exists: Claude for the two hard tasks. */

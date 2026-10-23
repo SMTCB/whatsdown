@@ -46,6 +46,15 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
     return undefined;
   };
 
+  /** The files the plan names (if they exist in the repo), else whatever retrieval found. */
+  const filesToPatch = async (suspected: readonly string[], located: string[]) => {
+    const named: string[] = [];
+    for (const path of suspected.slice(0, 3)) {
+      if (deps.code && (await deps.code.read(path)) !== null) named.push(path);
+    }
+    return named.length > 0 ? named : located;
+  };
+
   return {
     triage: (ticket) => triage(ctxFor(ticket), ticket),
 
@@ -59,7 +68,7 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
       const r = await diagnose(ctxFor(ticket), ticket, t, note, code);
       return {
         plan: `${r.plan}\n\nLikely files: ${r.suspectedFiles.join(", ") || "unknown"}\nRisk: ${r.risk}`,
-        files: code?.files.map((f) => f.path),
+        files: await filesToPatch(r.suspectedFiles, code?.files.map((f) => f.path) ?? []),
       };
     },
 

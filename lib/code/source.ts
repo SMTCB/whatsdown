@@ -35,14 +35,14 @@ export class GitHubCodeSource implements CodeSource {
 
   constructor(
     private readonly target: RepoRef,
-    private readonly token?: string,
+    private readonly token?: string | (() => Promise<string>),
     private readonly fetchFn: FetchLike = fetch as unknown as FetchLike,
     private readonly now: () => number = Date.now,
   ) {}
 
-  private headers(accept: string): Record<string, string> {
+  private async headers(accept: string): Promise<Record<string, string>> {
     const h: Record<string, string> = { Accept: accept, "User-Agent": "whatsdown" };
-    if (this.token) h.Authorization = `Bearer ${this.token}`;
+    if (this.token) h.Authorization = `Bearer ${typeof this.token === "function" ? await this.token() : this.token}`;
     return h;
   }
 
@@ -50,7 +50,7 @@ export class GitHubCodeSource implements CodeSource {
     if (this.cached && this.now() - this.cached.at < TREE_TTL_MS) return this.cached.paths;
     const { owner, repo, ref } = this.target;
     const res = await this.fetchFn(`https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`, {
-      headers: this.headers("application/vnd.github+json"),
+      headers: await this.headers("application/vnd.github+json"),
     });
     if (!res.ok) throw new Error(`GitHub tree request failed with status ${res.status}`);
     const data = (await res.json()) as { tree?: { path: string; type: string }[]; truncated?: boolean };
@@ -62,7 +62,7 @@ export class GitHubCodeSource implements CodeSource {
   async read(path: string): Promise<string | null> {
     const { owner, repo, ref } = this.target;
     const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`;
-    const res = await this.fetchFn(url, { headers: this.headers("application/vnd.github.raw+json") });
+    const res = await this.fetchFn(url, { headers: await this.headers("application/vnd.github.raw+json") });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`GitHub file request failed with status ${res.status}`);
     return res.text();

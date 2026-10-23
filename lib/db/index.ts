@@ -8,7 +8,7 @@ import { RuleScreener } from "@/lib/guard/screen";
 import { MemoryUsageLog } from "@/lib/llm/client";
 import { groqFromEnv } from "@/lib/llm/groq";
 import { GitHubCodeSource } from "@/lib/code/source";
-import { GitHubActionsSandbox } from "@/lib/sandbox/github-actions";
+import { GitHubActionsSandbox, GitHubAppAuth } from "@/lib/sandbox/github-actions";
 import { liveNodes } from "@/lib/pipeline/live-nodes";
 import type { PipelineDeps } from "@/lib/pipeline/runner";
 
@@ -42,7 +42,7 @@ export const DEMO_PROJECT_ID = "forza-fantasy-league";
 /** USD allowed per ticket before the agents stop. */
 export const TICKET_BUDGET_USD = 1.5;
 
-const globalForStore = globalThis as unknown as { __whatsdownStore?: TicketStore; __whatsdownUsage?: MemoryUsageLog; __whatsdownFiles?: AttachmentStore; __whatsdownCode?: GitHubCodeSource; __whatsdownSandbox?: GitHubActionsSandbox };
+const globalForStore = globalThis as unknown as { __whatsdownStore?: TicketStore; __whatsdownUsage?: MemoryUsageLog; __whatsdownFiles?: AttachmentStore; __whatsdownCode?: GitHubCodeSource; __whatsdownSandbox?: GitHubActionsSandbox; __whatsdownAuth?: GitHubAppAuth };
 
 /** Uploaded documents; in memory until Supabase Storage exists. */
 export function getAttachments(): AttachmentStore {

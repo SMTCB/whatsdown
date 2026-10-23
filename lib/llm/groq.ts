@@ -1,9 +1,12 @@
 import { MODELS } from "./pricing";
 import { RateLimitError, type LlmClient, type LlmRequest, type LlmResponse } from "./client";
 
+/** Longest Retry-After (seconds) worth waiting for. */
+const MAX_RETRY_WAIT_S = 30;
+const MAX_COMPLETION_TOKENS = 3_500;
 const ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 
-type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<Pick<Response, "ok" | "status" | "json" | "text">>;
+type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<Pick<Response, "ok" | "status" | "json" | "text"> & { headers?: Pick<Headers, "get"> }>;
 
 export class LlmProviderError extends Error {
   constructor(
@@ -26,6 +29,7 @@ export class GroqClient implements LlmClient {
     private readonly apiKey: string,
     private readonly fetchFn: FetchLike = fetch as unknown as FetchLike,
     private readonly timeoutMs = 30_000,
+    private readonly sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   ) {
     if (!apiKey) throw new Error("GROQ_API_KEY is empty");
   }
@@ -37,16 +41,32 @@ export class GroqClient implements LlmClient {
       // Prompt Guard rejects a system message; an empty system string means "none".
       messages: [...(req.system ? [{ role: "system", content: req.system }] : []), { role: "user", content: req.prompt }],
     };
-    if (req.model.startsWith("openai/gpt-oss") && req.effort) body.reasoning_effort = req.effort;
+    if (req.model.startsWith("openai/gpt-oss")) {
+      if (req.effort) body.reasoning_effort = req.effort;
+      // Reasoning tokens count against this cap; Groq also counts it toward the per-minute limit.
+      body.max_completion_tokens = MAX_COMPLETION_TOKENS;
+    }
 
-    const res = await this.fetchFn(ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(this.timeoutMs),
-    });
+    const send = () =>
+      this.fetchFn(ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    let res = await send();
+    // Free-tier limits reset within a minute: wait out a short Retry-After once before falling back.
+    const wait = res.status === 429 ? Number(res.headers?.get("retry-after")) : NaN;
+    if (wait > 0 && wait <= MAX_RETRY_WAIT_S) {
+      await this.sleep(wait * 1000);
+      res = await send();
+    }
     if (res.status === 429) throw new RateLimitError("Groq rate limit");
-    if (!res.ok) throw new LlmProviderError(`Groq request failed with status ${res.status}`, res.status);
+    if (!res.ok) {
+      // Groq's error text names the problem (token limit, bad request); it never contains our key.
+      const detail = await res.text().then((t) => (JSON.parse(t) as { error?: { message?: string } }).error?.message ?? "", () => "");
+      throw new LlmProviderError(`Groq request failed with status ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`, res.status);
+    }
 
     const data = (await res.json()) as ChatReply;
     const text = data.choices?.[0]?.message?.content;

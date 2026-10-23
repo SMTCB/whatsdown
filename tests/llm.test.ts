@@ -17,7 +17,7 @@ describe("pricing", () => {
 describe("router", () => {
   it("uses the plan's default routing", () => {
     expect(routeFor("triage").primary).toBe("openai/gpt-oss-20b");
-    expect(routeFor("diagnose")).toMatchObject({ primary: "openai/gpt-oss-120b", effort: "high" });
+    expect(routeFor("diagnose")).toMatchObject({ primary: "openai/gpt-oss-120b", effort: "medium" });
   });
   it("lets settings override a task (S6 Sonnet experiment)", () => {
     expect(routeFor("develop", { develop: { primary: "claude-sonnet-5-5" } }).primary).toBe("claude-sonnet-5-5");

@@ -20,6 +20,8 @@ export interface ActionsOptions {
   /** How long to wait for the workflow run before reporting a timeout. */
   timeoutMs?: number;
   pollMs?: number;
+  /** Share one token cache with other readers (e.g. the code source). */
+  auth?: GitHubAppAuth;
 }
 
 const API = "https://api.github.com";
@@ -34,6 +36,29 @@ export function appJwt(creds: Pick<GitHubAppCredentials, "appId" | "privateKey">
   const body = b64url(JSON.stringify({ iat, exp: iat + 600, iss: creds.appId }));
   const sig = createSign("RSA-SHA256").update(`${head}.${body}`).sign(creds.privateKey.replace(/\\n/g, "\n"));
   return `${head}.${body}.${b64url(sig)}`;
+}
+
+/** Exchanges the app key for short-lived installation tokens and caches them. */
+export class GitHubAppAuth {
+  private cached?: { value: string; expires: number };
+
+  constructor(
+    private readonly creds: GitHubAppCredentials,
+    private readonly fetchFn: FetchLike = fetch as unknown as FetchLike,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  async token(): Promise<string> {
+    if (this.cached && this.cached.expires > this.now() + 60_000) return this.cached.value;
+    const res = await this.fetchFn(`${API}/app/installations/${this.creds.installationId}/access_tokens`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${appJwt(this.creds, this.now())}`, Accept: "application/vnd.github+json", "User-Agent": "whatsdown" },
+    });
+    if (!res.ok) throw new Error(`GitHub App sign-in failed with status ${res.status}`);
+    const data = (await res.json()) as { token: string; expires_at: string };
+    this.cached = { value: data.token, expires: Date.parse(data.expires_at) };
+    return data.token;
+  }
 }
 
 interface Run {
@@ -52,7 +77,7 @@ interface Run {
 export class GitHubActionsSandbox implements Sandbox {
   private staged = new Map<string, string>();
   private branch?: string;
-  private token?: { value: string; expires: number };
+  private readonly auth: GitHubAppAuth;
   private readonly fetchFn: FetchLike;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly now: () => number;
@@ -66,8 +91,9 @@ export class GitHubActionsSandbox implements Sandbox {
     opts: ActionsOptions = {},
   ) {
     this.fetchFn = opts.fetchFn ?? (fetch as unknown as FetchLike);
-    this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     this.now = opts.now ?? Date.now;
+    this.auth = opts.auth ?? new GitHubAppAuth(creds, this.fetchFn, this.now);
+    this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     this.timeoutMs = opts.timeoutMs ?? 10 * 60_000;
     this.pollMs = opts.pollMs ?? 10_000;
   }
@@ -109,23 +135,11 @@ export class GitHubActionsSandbox implements Sandbox {
     await this.call("DELETE", `/git/refs/heads/${branch}`, undefined, [404, 422]);
   }
 
-  private async installationToken(): Promise<string> {
-    if (this.token && this.token.expires > this.now() + 60_000) return this.token.value;
-    const res = await this.fetchFn(`${API}/app/installations/${this.creds.installationId}/access_tokens`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${appJwt(this.creds, this.now())}`, Accept: "application/vnd.github+json", "User-Agent": "whatsdown" },
-    });
-    if (!res.ok) throw new Error(`GitHub App sign-in failed with status ${res.status}`);
-    const data = (await res.json()) as { token: string; expires_at: string };
-    this.token = { value: data.token, expires: Date.parse(data.expires_at) };
-    return data.token;
-  }
-
   private async call(method: string, path: string, body?: unknown, tolerated: number[] = []): Promise<unknown> {
     const res = await this.fetchFn(`${API}/repos/${this.target.owner}/${this.target.repo}${path}`, {
       method,
       headers: {
-        Authorization: `Bearer ${await this.installationToken()}`,
+        Authorization: `Bearer ${await this.auth.token()}`,
         Accept: "application/vnd.github+json",
         "User-Agent": "whatsdown",
         ...(body ? { "Content-Type": "application/json" } : {}),
