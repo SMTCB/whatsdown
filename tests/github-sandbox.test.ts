@@ -1,7 +1,7 @@
 import { generateKeyPairSync, createVerify } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { MemoryCodeSource } from "@/lib/code/source";
-import { appJwt, GitHubActionsSandbox } from "@/lib/sandbox/github-actions";
+import { appJwt, GitHubActionsSandbox, tidyLog } from "@/lib/sandbox/github-actions";
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -18,7 +18,7 @@ interface Call {
   auth?: string;
 }
 
-function fakeGitHub(runs: { status: string; conclusion: string | null }[][], jobs: unknown = { jobs: [] }) {
+function fakeGitHub(runs: { status: string; conclusion: string | null }[][], jobs: unknown = { jobs: [] }, logs = "") {
   const calls: Call[] = [];
   let poll = 0;
   const fetchFn = async (url: string, init: { method?: string; headers?: Record<string, string>; body?: string } = {}) => {
@@ -38,6 +38,7 @@ function fakeGitHub(runs: { status: string; conclusion: string | null }[][], job
       return ok({ workflow_runs: step.map((r, i) => ({ id: i + 1, html_url: "https://run", ...r })) });
     }
     if (path.endsWith("/jobs")) return ok(jobs);
+    if (path.includes("/actions/jobs/") && path.endsWith("/logs")) return { ok: true, status: 200, json: async () => ({}), text: async () => logs };
     return { ok: false, status: 404, json: async () => ({}), text: async () => "" };
   };
   return { calls, fetchFn };
@@ -128,5 +129,23 @@ describe("GitHubActionsSandbox", () => {
     await sb.reset();
     expect(gh.calls.some((c) => c.method === "DELETE" && c.path.includes("/git/refs/heads/whatsdown/"))).toBe(true);
     expect(sb.pushedBranch).toBeUndefined();
+  });
+});
+
+describe("failure log", () => {
+  it("returns a cleaned tail of the failing job's log", async () => {
+    const log = "2026-10-24T10:00:00.1234567Z ok line\n2026-10-24T10:00:01.0000000Z \u001b[31mError: boom\u001b[0m token ghp_abcdefghijklmnop123456\n";
+    const gh = fakeGitHub([[{ status: "completed", conclusion: "failure" }]], { jobs: [{ id: 7, name: "checks", conclusion: "failure", steps: [{ name: "npm test", conclusion: "failure" }] }] }, log);
+    const sb = make(gh);
+    await sb.apply([{ path: "a.js", content: "x" }]);
+    const res = await sb.runChecks();
+    expect(res.report?.logTail).toBe("ok line\nError: boom token [hidden]");
+  });
+
+  it("keeps only the last lines", () => {
+    const many = Array.from({ length: 100 }, (_, i) => `line ${i}`).join("\n");
+    const out = tidyLog(many).split("\n");
+    expect(out).toHaveLength(40);
+    expect(out.at(-1)).toBe("line 99");
   });
 });

@@ -158,6 +158,12 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
                   </div>
                 ))}
               </div>
+              {checks.logTail && (
+                <>
+                  <p className="mt-3 font-semibold">End of the failing step&apos;s log</p>
+                  <pre className="mt-1 max-h-96 overflow-auto rounded-md bg-[var(--line)] p-3 text-[0.8125rem] whitespace-pre-wrap">{checks.logTail}</pre>
+                </>
+              )}
             </details>
           )}
         </section>

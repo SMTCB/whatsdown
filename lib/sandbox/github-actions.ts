@@ -27,6 +27,24 @@ export interface ActionsOptions {
 const API = "https://api.github.com";
 const BRANCH_PREFIX = "whatsdown/";
 
+const LOG_TAIL_LINES = 40;
+const LOG_TAIL_CHARS = 3_000;
+
+/** Last lines of a job log for the owner: no timestamps or colour codes, and nothing that looks like a key or token. */
+export function tidyLog(raw: string): string {
+  const lines = raw
+    .split(/\r?\n/)
+    .map((l) =>
+      l
+        .replace(/^\uFEFF?\d{4}-\d\d-\d\dT[\d:.]+Z\s?/, "")
+        .replace(/\u001b\[[0-9;]*m/g, "")
+        .replace(/\b(?:gh[pousr]_|github_pat_|gsk_|sk-)[A-Za-z0-9_-]{8,}/g, "[hidden]")
+        .replace(/(Bearer|token)\s+[A-Za-z0-9._~+/=-]{12,}/gi, "$1 [hidden]"),
+    )
+    .filter((l) => l.trim() !== "");
+  return lines.slice(-LOG_TAIL_LINES).join("\n").slice(-LOG_TAIL_CHARS);
+}
+
 const b64url = (data: string | Buffer) => Buffer.from(data).toString("base64url");
 
 /** Short-lived JWT that proves we are the GitHub App (valid 10 minutes). */
@@ -230,15 +248,32 @@ export class GitHubActionsSandbox implements Sandbox, Publisher {
     return undefined;
   }
 
+  /** GitHub answers with a redirect to the log download; any failure just means no tail is shown. */
+  private async logTail(jobId: number): Promise<string | undefined> {
+    try {
+      const res = await this.fetchFn(`${API}/repos/${this.target.owner}/${this.target.repo}/actions/jobs/${jobId}/logs`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${await this.auth.token()}`, Accept: "application/vnd.github+json", "User-Agent": "whatsdown" },
+      });
+      if (!res.ok) return undefined;
+      return tidyLog(await res.text()) || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async describe(run: Run): Promise<CheckResult> {
-    type ApiJobs = { jobs: { name: string; conclusion: string | null; steps?: { name: string; conclusion: string | null }[] }[] };
+    type ApiJobs = { jobs: { id?: number; name: string; conclusion: string | null; steps?: { name: string; conclusion: string | null }[] }[] };
     const passed = run.conclusion === "success";
     // The step list is only a nicety for a passing run, so a failed lookup must not turn a pass into an error.
     const jobs = passed
       ? ((await this.call("GET", `/actions/runs/${run.id}/jobs`).catch(() => undefined)) as ApiJobs | undefined)
       : ((await this.call("GET", `/actions/runs/${run.id}/jobs`)) as ApiJobs);
+    const failed = passed ? undefined : jobs?.jobs.find((j) => j.conclusion !== "success" && j.conclusion !== "skipped");
+    const logTail = failed?.id ? await this.logTail(failed.id) : undefined;
     const report: CheckReport = {
       url: run.html_url,
+      ...(logTail ? { logTail } : {}),
       jobs: (jobs?.jobs ?? []).map((j) => ({
         name: j.name,
         conclusion: j.conclusion ?? "unfinished",

@@ -10,6 +10,8 @@ export interface FileChange {
 export interface CheckReport {
   /** Where the full logs live (GitHub Actions run page). */
   url?: string;
+  /** Last lines of the first failed job's log, cleaned of timestamps and anything that looks like a key. */
+  logTail?: string;
   jobs: { name: string; conclusion: string; steps: { name: string; conclusion: string }[] }[];
 }
 
