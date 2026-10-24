@@ -62,9 +62,18 @@ export class GroqClient implements LlmClient {
       res = await send();
     }
     if (res.status === 429) throw new RateLimitError("Groq rate limit");
+    let detail = "";
     if (!res.ok) {
       // Groq's error text names the problem (token limit, bad request); it never contains our key.
-      const detail = await res.text().then((t) => (JSON.parse(t) as { error?: { message?: string } }).error?.message ?? "", () => "");
+      detail = await res.text().then((t) => (JSON.parse(t) as { error?: { message?: string } }).error?.message ?? "", () => "");
+      // gpt-oss sometimes answers with a tool call although none are offered; the next sample is normally fine.
+      if (res.status === 400 && detail.includes("model called a tool")) {
+        res = await send();
+        if (res.status === 429) throw new RateLimitError("Groq rate limit");
+        detail = res.ok ? "" : await res.text().then((t) => (JSON.parse(t) as { error?: { message?: string } }).error?.message ?? "", () => "");
+      }
+    }
+    if (!res.ok) {
       throw new LlmProviderError(`Groq request failed with status ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`, res.status);
     }
 

@@ -8,6 +8,17 @@ export const WORKING: readonly TicketStatus[] = ["new", "triaged", "diagnosing",
 export const STALL_MS = 10 * 60_000;
 export const MAX_RETRIES = 3;
 
+/** Where a failed ticket resumes, by the status it failed in. Earlier work is kept; statuses with no way back are left failed. */
+const RESUME_AT: Partial<Record<TicketStatus, TicketStatus>> = {
+  triaged: "triaged",
+  diagnosing: "diagnosing",
+  patching: "patching",
+  in_qa: "patching",
+};
+
+/** A failed ticket waits this long before its next attempt, so a provider hiccup can clear. */
+export const FAILED_COOLDOWN_MS = 2 * 60_000;
+
 export interface RecoveryOutcome {
   ticketId: string;
   number: number;
@@ -30,6 +41,20 @@ export async function recoverStalled(deps: PipelineDeps, opts: RecoveryOptions =
   const staleMs = opts.staleMs ?? STALL_MS;
   const maxRetries = opts.maxRetries ?? MAX_RETRIES;
   const out: RecoveryOutcome[] = [];
+
+  // Tickets that failed in a step (provider error, timeout) get another go while they have retries left.
+  for (const t of await deps.store.list({ status: "failed" })) {
+    if (t.retryCount >= maxRetries || now - Date.parse(t.updatedAt) <= FAILED_COOLDOWN_MS) continue;
+    const failure = [...(await deps.store.events(t.id))].reverse().find((e) => e.toStatus === "failed");
+    // A spent budget is a decision, not a hiccup: retrying would only run into it again.
+    const overBudget = /budget exceeded/i.test(String(failure?.payload.error ?? ""));
+    const resume = overBudget || failure?.actor !== "system" || !failure.fromStatus ? undefined : RESUME_AT[failure.fromStatus];
+    if (!resume) continue;
+    await deps.store.recordRetry(t.id, `failed in "${failure!.fromStatus}", trying again`);
+    await transition(deps.store, t.id, resume, "system", "retrying after failure");
+    const after = await advance(deps, t.id);
+    out.push({ ticketId: t.id, number: t.number, action: "retried", status: after.status });
+  }
 
   const stalled = (await deps.store.list()).filter((t) => WORKING.includes(t.status) && now - Date.parse(t.updatedAt) > staleMs);
   for (const t of stalled) {

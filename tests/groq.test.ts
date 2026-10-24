@@ -23,6 +23,27 @@ describe("GroqClient", () => {
     await expect(client.complete({ model: "openai/gpt-oss-20b", system: "s", prompt: "p" })).rejects.toBeInstanceOf(RateLimitError);
   });
 
+  it("resends once when gpt-oss answers with a tool call nobody asked for", async () => {
+    const replies = [
+      ok({ error: { message: "Tool choice is none, but model called a tool" } }, 400),
+      ok({ choices: [{ message: { content: "fine" } }], usage: { prompt_tokens: 10, completion_tokens: 5 } }),
+    ];
+    let calls = 0;
+    const client = new GroqClient(SECRET, async () => replies[calls++]!());
+    expect((await client.complete({ model: "openai/gpt-oss-120b", system: "s", prompt: "p" })).text).toBe("fine");
+    expect(calls).toBe(2);
+  });
+
+  it("gives up if the second answer is also a bad request", async () => {
+    let calls = 0;
+    const client = new GroqClient(SECRET, async () => {
+      calls++;
+      return ok({ error: { message: "Tool choice is none, but model called a tool" } }, 400)();
+    });
+    await expect(client.complete({ model: "openai/gpt-oss-120b", system: "s", prompt: "p" })).rejects.toBeInstanceOf(LlmProviderError);
+    expect(calls).toBe(2);
+  });
+
   it("never puts the key in an error message", async () => {
     const client = new GroqClient(SECRET, ok({ error: SECRET }, 401));
     const err = await client.complete({ model: "openai/gpt-oss-20b", system: "s", prompt: "p" }).catch((e) => e);

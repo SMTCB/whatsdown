@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MemoryStore } from "@/lib/db/memory-store";
 import { transition } from "@/lib/db/transition";
 import { demoNodes } from "@/lib/pipeline/demo-nodes";
-import { MAX_RETRIES, STALL_MS, recoverStalled } from "@/lib/pipeline/recover";
+import { FAILED_COOLDOWN_MS, MAX_RETRIES, STALL_MS, recoverStalled } from "@/lib/pipeline/recover";
 import type { PipelineDeps } from "@/lib/pipeline/runner";
 
 const input = { projectId: "p", title: "Pitch view crashes on load", body: "Opening the pitch view shows a blank page on every device." };
@@ -39,6 +39,22 @@ describe("recoverStalled", () => {
     await transition(store, id, "diagnosing", "agent", "x");
     await transition(store, id, "awaiting_plan_approval", "agent", "plan ready", { plan: "p" });
     expect(await recoverStalled(deps, { now: later(STALL_MS * 10) })).toEqual([]);
+  });
+
+  it("retries a ticket that failed in a step, but not one over budget or out of retries", async () => {
+    const { deps, store, id } = await setup();
+    await transition(store, id, "diagnosing", "agent", "x");
+    await transition(store, id, "failed", "system", "step threw", { error: "Groq request failed with status 400" });
+    expect(await recoverStalled(deps, { now: later(60_000) })).toEqual([]); // still cooling down
+    const out = await recoverStalled(deps, { now: later(FAILED_COOLDOWN_MS + 60_000) });
+    expect(out).toEqual([expect.objectContaining({ ticketId: id, action: "retried", status: "awaiting_plan_approval" })]);
+
+    const b = await store.create(input);
+    await transition(store, b.id, "triaged", "agent", "x");
+    await transition(store, b.id, "diagnosing", "agent", "x");
+    await transition(store, b.id, "failed", "system", "step threw", { error: "Ticket budget exceeded: $1.60 of $1.50" });
+    expect(await recoverStalled(deps, { now: later(FAILED_COOLDOWN_MS + 60_000) })).toEqual([]);
+    expect((await store.get(b.id))?.status).toBe("failed");
   });
 
   it("marks the ticket failed once the retries are used up", async () => {
