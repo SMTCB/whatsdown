@@ -1,3 +1,4 @@
+import { unusedFiles } from "@/lib/code/imports";
 import { locate } from "@/lib/code/locate";
 import type { CodeSource } from "@/lib/code/source";
 import { communicate } from "@/lib/agents/communicator";
@@ -58,7 +59,10 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
     for (const path of suspected.slice(0, 3)) {
       if (deps.code && (await deps.code.read(path)) !== null) named.push(path);
     }
-    return named.length > 0 ? named : located;
+    // A file nothing imports cannot change what the reporter sees.
+    const dead = deps.code ? await unusedFiles(deps.code, named) : new Set<string>();
+    const live = named.filter((p) => !dead.has(p));
+    return { files: live.length > 0 ? live : located, dead: [...dead] };
   };
 
   return {
@@ -85,10 +89,24 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
       const t = triaged?.type && triaged.severity && triaged.area ? { type: triaged.type, severity: triaged.severity, area: triaged.area } : undefined;
       const code = deps.code ? await locate(await ctxFor(ticket), deps.code, ticket, t) : undefined;
       const r = await diagnose(await ctxFor(ticket), ticket, t, note, code);
-      return {
-        plan: `${r.plan}\n\nLikely files: ${r.suspectedFiles.join(", ") || "unknown"}\nRisk: ${r.risk}`,
-        files: await filesToPatch(r.suspectedFiles, code?.files.map((f) => f.path) ?? []),
-      };
+      if (!r.located) {
+        // Say so rather than edit a file that merely looks related.
+        const looked = r.trace ? `\n\nWhat I looked for: ${r.trace}` : "";
+        return {
+          plan: `I could not find where this lives, so I am not proposing a change.\n\n${r.plan}${looked}\n\nRevise this plan with a hint (the screen, the exact words shown), or close the ticket.`,
+          files: [],
+        };
+      }
+      const picked = await filesToPatch(r.suspectedFiles, code?.files.map((f) => f.path) ?? []);
+      const ignored = [...new Set([...(code?.unused ?? []), ...picked.dead])];
+      const parts = [
+        r.plan,
+        r.trace ? `How I found it: ${r.trace}` : "",
+        `Files to change: ${picked.files.join(", ") || "unknown"}`,
+        ignored.length ? `Ignored, not used by the app: ${ignored.join(", ")}` : "",
+        `Risk: ${r.risk}`,
+      ];
+      return { plan: parts.filter(Boolean).join("\n\n"), files: picked.files, ...(r.anchors.length ? { anchors: r.anchors } : {}) };
     },
 
     async develop(ticket) {
@@ -97,12 +115,14 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
         e.fromStatus === "in_qa" && e.toStatus === "patching" && typeof e.payload.summary === "string" ? e.payload.summary : undefined,
       );
       const paths = (await latest(ticket, (e) => (Array.isArray(e.payload.files) ? (e.payload.files as string[]) : undefined))) ?? [];
+      const anchors = (await latest(ticket, (e) => (Array.isArray(e.payload.anchors) ? (e.payload.anchors as string[]) : undefined))) ?? [];
+      if (deps.code && paths.length === 0) return { ok: false, summary: "The approved plan names no file to change, so there is nothing to patch." };
       const original = [];
       for (const path of paths) {
         const content = deps.code ? await deps.code.read(path) : null;
         if (content !== null) original.push({ path, content });
       }
-      const r = await develop(await ctxFor(ticket), ticket, plan, deps.sandbox, deps.policy, feedback, original);
+      const r = await develop(await ctxFor(ticket), ticket, plan, deps.sandbox, deps.policy, feedback, original, anchors);
       return { ok: r.ok, summary: r.summary };
     },
 

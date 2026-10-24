@@ -14,7 +14,7 @@ export interface PipelineNodes {
   triage(ticket: Ticket): Promise<TriageResult>;
   /** Text read from the ticket's attached screenshots, to add to the ticket before triage. */
   readImages?(ticket: Ticket): Promise<string | undefined>;
-  diagnose(ticket: Ticket): Promise<{ plan: string; files?: string[] }>;
+  diagnose(ticket: Ticket): Promise<{ plan: string; files?: string[]; anchors?: string[] }>;
   develop(ticket: Ticket): Promise<{ ok: boolean; summary: string }>;
   qa(ticket: Ticket): Promise<{ passed: boolean; summary: string; branch?: string; checks?: CheckReport }>;
   /** Lands the QA-approved branch on the project. Only called from resolveGate2 after the owner approves. */
@@ -94,8 +94,12 @@ export async function advance(deps: PipelineDeps, ticketId: string): Promise<Tic
           await transition(store, ticketId, "diagnosing", "agent", "diagnosis started");
           break;
         case "diagnosing": {
-          const { plan, files } = await nodes.diagnose(ticket);
-          await transition(store, ticketId, "awaiting_plan_approval", "agent", "plan ready", { plan, ...(files ? { files } : {}) });
+          const { plan, files, anchors } = await nodes.diagnose(ticket);
+          await transition(store, ticketId, "awaiting_plan_approval", "agent", "plan ready", {
+            plan,
+            ...(files ? { files } : {}),
+            ...(anchors ? { anchors } : {}),
+          });
           break;
         }
         case "patching": {

@@ -69,4 +69,16 @@ export const FANTASY_PROTECTED_PATHS = [
   "middleware.js",
   "vercel.json",
   "capacitor.config.ts",
+  "Dockerfile",
+  "docker-compose.yml",
+  "infra/**",
+  "scripts/**",
+  "e2e/**",
+  "playwright.config.js",
+  // Scoring and sign-in: a wrong change here costs real points or locks people out, so a person makes it.
+  "src/lib/**/scoring*",
+  "tests/unit/*scoring*",
+  "src/context/AuthContext.jsx",
+  "src/hooks/useAuth.js",
+  "src/screens/AuthScreen.jsx",
 ] as const;

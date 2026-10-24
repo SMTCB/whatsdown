@@ -4,6 +4,8 @@ export interface CodeSource {
   tree(): Promise<string[]>;
   /** File text, or null if the path does not exist. */
   read(path: string): Promise<string | null>;
+  /** Paths of files whose text contains the phrase (case-insensitive). Absent when the source cannot search. */
+  search?(phrase: string): Promise<string[]>;
 }
 
 export class MemoryCodeSource implements CodeSource {
@@ -13,6 +15,12 @@ export class MemoryCodeSource implements CodeSource {
   }
   async read(path: string) {
     return this.files[path] ?? null;
+  }
+  async search(phrase: string) {
+    const needle = phrase.toLowerCase();
+    return Object.entries(this.files)
+      .filter(([, text]) => text.toLowerCase().includes(needle))
+      .map(([path]) => path);
   }
 }
 
@@ -66,5 +74,17 @@ export class GitHubCodeSource implements CodeSource {
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`GitHub file request failed with status ${res.status}`);
     return res.text();
+  }
+
+  /** GitHub code search on the default branch. Rate limited (10 a minute), so callers use it sparingly. */
+  async search(phrase: string): Promise<string[]> {
+    const { owner, repo } = this.target;
+    const q = `"${phrase.replace(/["\\]/g, " ")}" repo:${owner}/${repo}`;
+    const res = await this.fetchFn(`https://api.github.com/search/code?q=${encodeURIComponent(q)}&per_page=10`, {
+      headers: await this.headers("application/vnd.github+json"),
+    });
+    if (!res.ok) throw new Error(`GitHub search failed with status ${res.status}`);
+    const data = (await res.json()) as { items?: { path: string }[] };
+    return (data.items ?? []).map((i) => i.path);
   }
 }

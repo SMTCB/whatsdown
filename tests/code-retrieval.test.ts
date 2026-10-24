@@ -13,6 +13,7 @@ const repo = {
   "CLAUDE.md": "Fantasy app guide",
   "src/scores.js": "export const score = () => 0;",
   "src/teams.js": "export const teams = [];",
+  "src/main.js": "import { score } from './scores.js'; import { teams } from './teams';",
   "node_modules/x/index.js": "vendored",
   "package-lock.json": "{}",
   "logo.png": "binary",
@@ -20,7 +21,7 @@ const repo = {
 
 describe("candidatePaths", () => {
   it("drops vendored code, lockfiles and binaries", () => {
-    expect(candidatePaths(Object.keys(repo))).toEqual(["CLAUDE.md", "src/scores.js", "src/teams.js"]);
+    expect(candidatePaths(Object.keys(repo))).toEqual(["CLAUDE.md", "src/scores.js", "src/teams.js", "src/main.js"]);
   });
 });
 
@@ -55,7 +56,7 @@ describe("groupOf", () => {
 
 describe("locate on a big repository", () => {
   it("first narrows to directories, then offers only files from them", async () => {
-    const files: Record<string, string> = { "src/scores/captain.js": "captain" };
+    const files: Record<string, string> = { "src/scores/captain.js": "captain", "src/main.js": "import './scores/captain.js';" };
     for (let i = 0; i < 300; i++) files[`src/other${i % 5}/f${i}.js`] = "x";
     const client = new FakeLlmClient([
       reply(JSON.stringify({ dirs: ["src/scores", "not/a/dir"] })),
@@ -75,6 +76,8 @@ describe("diagnose with code", () => {
     await diagnose({ ...base, client, log: new MemoryUsageLog() }, ticket, undefined, undefined, {
       docs: [],
       files: [{ path: "src/scores.js", content: "export const score = () => 0;" }],
+      searched: [],
+      unused: [],
     });
     expect(client.requests[0]?.prompt).toContain('<code path="src/scores.js">');
   });

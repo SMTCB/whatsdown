@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Ticket } from "@/lib/db/store";
 import { renderCode } from "@/lib/code/locate";
+import { excerptAround, outline } from "@/lib/code/search";
 import type { CodeFile } from "@/lib/code/locate";
 import { checkDiff, type ChangedFile, type GuardPolicy, type GuardViolation } from "@/lib/guard/diff-guard";
 import { runStructured, type TaskContext } from "@/lib/llm/client";
@@ -35,8 +36,8 @@ Do not touch dependency files, migrations, CI config, secrets or BACKLOG.md.
 Reply with JSON only: {"summary":"one sentence","edits":[{"path":"relative/path","find":"exact old snippet","replace":"new snippet"}],"changes":[]}.`;
 
 /** What one prompt shows of each file; edits are still applied to the full file. */
-const PROMPT_FILE_CHARS = 5_000;
-const PROMPT_TOTAL_CHARS = 8_000;
+const PROMPT_FILE_CHARS = 6_500;
+const PROMPT_TOTAL_CHARS = 9_000;
 
 /** Finds a snippet whose lines match ignoring indentation and line endings; models often drift on whitespace. */
 function looseMatch(text: string, find: string): { start: number; length: number } | "ambiguous" | undefined {
@@ -110,14 +111,17 @@ export async function develop(
   feedback?: string,
   /** Current content of the files the plan names, so edits are made against the real code. */
   original: readonly CodeFile[] = [],
+  /** Functions or snippets the plan will change; the prompt shows the part of each file around them. */
+  anchors: readonly string[] = [],
 ): Promise<DevelopResult> {
   const retry = feedback ? `\n\nThe previous attempt failed QA:\n<qa_output>${feedback}</qa_output>` : "";
   let budget = PROMPT_TOTAL_CHARS;
   const shown = original.map((f) => {
-    const content = f.content.slice(0, Math.max(0, Math.min(PROMPT_FILE_CHARS, budget)));
+    const room = Math.max(0, Math.min(PROMPT_FILE_CHARS, budget));
+    // Show the part of a long file that the plan points at, not just its first lines.
+    const content = excerptAround(f.content, anchors, room);
     budget -= content.length;
-    return { path: f.path, content: content.length < f.content.length ? `${content}
-[... rest of file not shown ...]` : content };
+    return { path: f.path, content, ...(f.content.length > room ? { outline: outline(f.content) } : {}) };
   });
   const current = shown.length > 0 ? `${renderCode({ docs: [], files: shown })}
 
