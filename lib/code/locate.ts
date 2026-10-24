@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Ticket } from "@/lib/db/store";
 import { runStructured, type TaskContext } from "@/lib/llm/client";
 import { unusedFiles } from "./imports";
-import { excerptAround, findByText, outline, uiStrings } from "./search";
+import { excerptWithCallees, findByText, outline, uiStrings } from "./search";
 import type { CodeSource } from "./source";
 
 export interface CodeFile {
@@ -35,8 +35,10 @@ export const LOCATE_LIMITS = {
   /** Above this many candidate paths the search first narrows to directories. */
   maxPathsPerStage: 250,
   fileChars: 4_000,
+  /** A file that holds the on-screen text gets more room: the cause is usually near it or in a function it calls. */
+  matchedFileChars: 9_000,
   docChars: 1_200,
-  totalChars: 9_000,
+  totalChars: 14_000,
 };
 
 const DOC_PATHS = ["CLAUDE.md", "docs/DOCS_MAP.md", "README.md"];
@@ -134,9 +136,9 @@ export async function locate(
       if (dead.has(p)) continue;
       const text = await source.read(p);
       if (text === null) continue;
-      const room = Math.min(LOCATE_LIMITS.fileChars, LOCATE_LIMITS.totalChars - total);
       const matched = hits.find((h) => h.path === p)?.matched;
-      const content = matched ? excerptAround(text, matched, room) : clip(text, room);
+      const room = Math.min(matched ? LOCATE_LIMITS.matchedFileChars : LOCATE_LIMITS.fileChars, LOCATE_LIMITS.totalChars - total);
+      const content = matched ? excerptWithCallees(text, matched, room) : clip(text, room);
       files.push({ path: p, content, ...(matched ? { matched } : {}), ...(text.length > room ? { outline: outline(text) } : {}) });
       total += content.length;
     }

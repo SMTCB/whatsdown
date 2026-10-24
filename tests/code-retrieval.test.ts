@@ -89,7 +89,7 @@ describe("agent nodes with a code source", () => {
     const t = await store.create({ projectId: "p", title: ticket.title, body: ticket.body, channel: "web" });
     const client = new FakeLlmClient([
       reply(JSON.stringify({ files: ["src/scores.js"] })),
-      reply(JSON.stringify({ plan: "Fix score", suspectedFiles: ["src/scores.js"], risk: "low" })),
+      reply(JSON.stringify({ plan: "Fix score", suspectedFiles: ["src/scores.js"], risk: "low", evidence: [{ path: "src/scores.js", quote: "export const score = () => 0;" }] })),
     ]);
     const nodes = createAgentNodes({
       store,

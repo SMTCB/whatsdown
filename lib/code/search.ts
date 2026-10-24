@@ -95,3 +95,34 @@ export function outline(content: string, maxItems = 40): string {
   }
   return items.join(", ");
 }
+
+/**
+ * Like `excerptAround`, but when the window around the screen text only calls a function that is defined further away
+ * (a table that maps rows through `renderRow`), the start of that definition is shown too: the cause often lives there.
+ */
+export function excerptWithCallees(content: string, needles: readonly string[], max: number): string {
+  if (content.length <= max) return content;
+  const main = excerptAround(content, needles, Math.floor(max * 0.3));
+  let left = max - main.length;
+  let out = main;
+  const seen = new Set<string>();
+  // The rows are often rendered a little below the heading, so look for calls in the lines that follow the match too.
+  const lower = content.toLowerCase();
+  let scanned = main;
+  for (const n of needles) {
+    for (let i = lower.indexOf(n.toLowerCase()), k = 0; i !== -1 && k < 3; i = lower.indexOf(n.toLowerCase(), i + 1), k++) scanned += `\n${content.slice(i, i + 3000)}`;
+  }
+  for (const m of scanned.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)) {
+    const name = m[1]!;
+    if (seen.has(name) || left < 600) continue;
+    seen.add(name);
+    const def = new RegExp(`^[ \\t]*(?:async\\s+)?function\\s+${name.replace(/\$/g, "\\$")}\\b`, "m").exec(content);
+    if (!def || main.includes(`function ${name}`)) continue;
+    let block = content.slice(def.index, def.index + left);
+    const cut = block.lastIndexOf("\n");
+    if (def.index + left < content.length && cut > 0) block = block.slice(0, cut);
+    out += `\n[... function ${name}, defined elsewhere in the file ...]\n${block}`;
+    left -= block.length + 60;
+  }
+  return out;
+}

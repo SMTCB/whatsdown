@@ -1,4 +1,5 @@
 import { unusedFiles } from "@/lib/code/imports";
+import { checkQuotes, type Quote } from "@/lib/code/evidence";
 import { locate } from "@/lib/code/locate";
 import type { CodeSource } from "@/lib/code/source";
 import { communicate } from "@/lib/agents/communicator";
@@ -88,7 +89,18 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
       );
       const t = triaged?.type && triaged.severity && triaged.area ? { type: triaged.type, severity: triaged.severity, area: triaged.area } : undefined;
       const code = deps.code ? await locate(await ctxFor(ticket), deps.code, ticket, t) : undefined;
-      const r = await diagnose(await ctxFor(ticket), ticket, t, note, code);
+      let r = await diagnose(await ctxFor(ticket), ticket, t, note, code);
+      // A diagnosis has to show the code it rests on. Quotes that are not in the file mean the model guessed.
+      let proof = { verified: [] as Quote[], rejected: [] as Quote[] };
+      if (deps.code && r.located) {
+        const read = (p: string) => deps.code!.read(p);
+        proof = await checkQuotes(read, r.evidence);
+        if (proof.verified.length === 0) {
+          const hint = `Your last answer gave no evidence that could be found in the files. Quote 1 to 4 exact lines of the code shown that cause the problem, copied character for character.`;
+          r = await diagnose(await ctxFor(ticket), ticket, t, note, code, hint);
+          if (r.located) proof = await checkQuotes(read, r.evidence);
+        }
+      }
       if (!r.located) {
         // Say so rather than edit a file that merely looks related.
         const looked = r.trace ? `\n\nWhat I looked for: ${r.trace}` : "";
@@ -99,9 +111,14 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
       }
       const picked = await filesToPatch(r.suspectedFiles, code?.files.map((f) => f.path) ?? []);
       const ignored = [...new Set([...(code?.unused ?? []), ...picked.dead])];
+      const evidence = proof.verified.map((q) => `${q.path}:\n${q.quote.trim()}`).join("\n\n");
       const parts = [
+        deps.code && proof.verified.length === 0
+          ? "Not verified: I could not back this diagnosis with a line of code that exists in the file. Treat the cause below as a guess and check it before approving."
+          : "",
         r.plan,
         r.trace ? `How I found it: ${r.trace}` : "",
+        evidence ? `Code this is based on (checked against the file):\n${evidence}` : "",
         `Files to change: ${picked.files.join(", ") || "unknown"}`,
         ignored.length ? `Ignored, not used by the app: ${ignored.join(", ")}` : "",
         `Risk: ${r.risk}`,

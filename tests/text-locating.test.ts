@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { unusedFiles } from "@/lib/code/imports";
 import { locate } from "@/lib/code/locate";
-import { excerptAround, outline, uiStrings } from "@/lib/code/search";
+import { excerptAround, excerptWithCallees, outline, uiStrings } from "@/lib/code/search";
 import { GitHubCodeSource, MemoryCodeSource } from "@/lib/code/source";
 import { MemoryStore } from "@/lib/db/memory-store";
 import { checkDiff, FANTASY_PROTECTED_PATHS } from "@/lib/guard/diff-guard";
@@ -55,6 +55,15 @@ describe("excerptAround and outline", () => {
     expect(part).toContain("function renderScoreRow");
     expect(part).not.toContain('import React');
     expect(part).toContain("earlier lines not shown");
+  });
+
+  it("also shows the start of a function the window calls but does not define", () => {
+    const filler = Array.from({ length: 200 }, (_, i) => `  // filler ${i}`).join("\n");
+    const file = `function Table() {\n  return rows.map((r) => renderScoreRow(r));\n}\n// Matchday scores\n${filler}\nfunction renderScoreRow(r) {\n  return <td>{r.points} +bet</td>;\n}\n`;
+    const part = excerptWithCallees(file, ["Matchday scores"], 1500);
+    expect(part).toContain("function renderScoreRow");
+    expect(part).toContain("+bet");
+    expect(part.length).toBeLessThanOrEqual(1600);
   });
 
   it("lists functions with line numbers", () => {
@@ -134,6 +143,7 @@ describe("diagnose and develop with a trace", () => {
           trace: 'searched "Matchday scores", found in RecapView.jsx',
           located: true,
           anchors: ["renderScoreRow"],
+          evidence: [{ path: "src/components/league/RecapView.jsx", quote: "return <tr>{r.points}</tr>;" }],
         }),
       ),
     ]);
@@ -141,7 +151,33 @@ describe("diagnose and develop with a trace", () => {
     expect(r.files).toEqual(["src/components/league/RecapView.jsx"]);
     expect(r.anchors).toEqual(["renderScoreRow"]);
     expect(r.plan).toContain("How I found it: searched");
+    expect(r.plan).toContain("Code this is based on (checked against the file):\nsrc/components/league/RecapView.jsx:\nreturn <tr>{r.points}</tr>;");
+    expect(r.plan).not.toContain("Not verified");
     expect(r.plan).toContain("Ignored, not used by the app: src/components/RecapCard.jsx");
+  });
+
+  const guess = (evidence: { path: string; quote: string }[]) =>
+    reply(JSON.stringify({ plan: "Wrap the cell.", suspectedFiles: ["src/components/league/RecapView.jsx"], risk: "low", trace: "found", located: true, evidence }));
+
+  it("asks once more when the quoted lines are not in the file, and uses the second answer", async () => {
+    const { nodes, t, client } = await nodesFor([
+      reply(JSON.stringify({ files: [] })),
+      guess([{ path: "src/components/league/RecapView.jsx", quote: "style={{ whiteSpace: 'wrap' }} invented" }]),
+      guess([{ path: "src/components/league/RecapView.jsx", quote: "return <h2>Matchday   scores</h2>;" }]),
+    ]);
+    const r = await nodes.diagnose(t);
+    expect(client.requests).toHaveLength(3);
+    expect(client.requests[2]?.prompt).toContain("gave no evidence that could be found");
+    expect(r.plan).not.toContain("Not verified");
+    expect(r.plan).toContain("return <h2>Matchday   scores</h2>;");
+  });
+
+  it("flags the plan as unverified when no quote can be found after the retry", async () => {
+    const bad = guess([{ path: "src/components/league/RecapView.jsx", quote: "nothing like this exists in the file" }]);
+    const { nodes, t } = await nodesFor([reply(JSON.stringify({ files: [] })), bad, bad]);
+    const r = await nodes.diagnose(t);
+    expect(r.plan.startsWith("Not verified:")).toBe(true);
+    expect(r.plan).not.toContain("Code this is based on");
   });
 
   it("proposes no change when the model says it could not locate the problem", async () => {
@@ -187,5 +223,22 @@ describe("GitHubCodeSource.search", () => {
     });
     expect(await src.search("Matchday scores")).toEqual(["a.jsx"]);
     expect(decodeURIComponent(url)).toContain('q="Matchday scores" repo:o/r');
+  });
+});
+
+describe("checkQuotes", () => {
+  const files: Record<string, string> = { "a.js": "const x = 1;\n  const longer   name = compute(a,\n    b);" };
+  const read = async (p: string) => files[p] ?? null;
+
+  it("accepts a quote that differs only in whitespace and rejects the rest", async () => {
+    const { checkQuotes } = await import("@/lib/code/evidence");
+    const r = await checkQuotes(read, [
+      { path: "a.js", quote: "const longer name = compute(a, b);" },
+      { path: "a.js", quote: "const invented = 2;" },
+      { path: "missing.js", quote: "const x = 1; anything here" },
+      { path: "a.js", quote: "const x" },
+    ]);
+    expect(r.verified.map((q) => q.quote)).toEqual(["const longer name = compute(a, b);"]);
+    expect(r.rejected).toHaveLength(3);
   });
 });
