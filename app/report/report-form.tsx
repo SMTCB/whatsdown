@@ -11,7 +11,7 @@ export interface ReportState {
 
 const initial: ReportState = { title: "", body: "" };
 
-export function ReportForm({ action }: { action: (prev: ReportState, formData: FormData) => Promise<ReportState> }) {
+export function ReportForm({ action, needsCode }: { action: (prev: ReportState, formData: FormData) => Promise<ReportState>; needsCode?: boolean }) {
   const [state, formAction, pending] = useActionState(action, initial);
   const maxMb = ATTACH_LIMITS.maxBytes / 1024 / 1024;
   return (
@@ -40,6 +40,17 @@ export function ReportForm({ action }: { action: (prev: ReportState, formData: F
             What you did, what you expected and what you saw instead.
           </p>
         </div>
+        {needsCode && (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="code" className="label">
+              Access code
+            </label>
+            <input id="code" name="code" required autoComplete="off" className="field" aria-describedby="code-hint" />
+            <p id="code-hint" className="hint">
+              The code the maintainer shared with the group. It keeps spam out.
+            </p>
+          </div>
+        )}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="files" className="label">
             Documents <span className="font-normal text-[var(--muted)]">(optional)</span>

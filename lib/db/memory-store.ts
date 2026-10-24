@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { Actor, NewTicket, Ticket, TicketEvent, TicketStore } from "./store";
 import type { TicketStatus } from "@/lib/domain/status";
 
@@ -13,6 +13,7 @@ export class MemoryStore implements TicketStore {
     const ticket: Ticket = {
       id: randomUUID(),
       number: this.nextNumber++,
+      publicToken: randomBytes(24).toString("hex"),
       projectId: input.projectId,
       title: input.title,
       body: input.body,
@@ -32,6 +33,22 @@ export class MemoryStore implements TicketStore {
   async get(id: string) {
     const t = this.tickets.get(id);
     return t ? { ...t } : null;
+  }
+
+  async getByToken(token: string) {
+    const t = token ? [...this.tickets.values()].find((x) => x.publicToken === token) : undefined;
+    return t ? { ...t } : null;
+  }
+
+  async appendDetails(id: string, text: string) {
+    const t = this.tickets.get(id);
+    if (!t) throw new Error(`Ticket ${id} not found`);
+    t.body = `${t.body}
+
+Follow-up from the reporter:
+${text}`;
+    t.updatedAt = new Date().toISOString();
+    return { ...t };
   }
 
   async list(filter?: { status?: TicketStatus }) {

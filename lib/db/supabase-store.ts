@@ -5,6 +5,7 @@ import type { Actor, NewTicket, Ticket, TicketEvent, TicketStore } from "./store
 interface TicketRow {
   id: string;
   number: number;
+  public_token: string;
   project_id: string;
   title: string;
   body: string;
@@ -31,6 +32,7 @@ interface EventRow {
 const toTicket = (r: TicketRow): Ticket => ({
   id: r.id,
   number: r.number,
+  publicToken: r.public_token,
   projectId: r.project_id,
   title: r.title,
   body: r.body,
@@ -79,6 +81,17 @@ export class SupabaseStore implements TicketStore {
   async get(id: string): Promise<Ticket | null> {
     const row = check<TicketRow>(await this.db.from("tickets").select("*").eq("id", id).maybeSingle());
     return row ? toTicket(row) : null;
+  }
+
+  async getByToken(token: string): Promise<Ticket | null> {
+    if (!token) return null;
+    const row = check<TicketRow>(await this.db.from("tickets").select("*").eq("public_token", token).maybeSingle());
+    return row ? toTicket(row) : null;
+  }
+
+  async appendDetails(id: string, text: string): Promise<Ticket> {
+    const row = check<TicketRow>(await this.db.rpc("append_ticket_details", { p_id: id, p_text: text }));
+    return toTicket(row!);
   }
 
   async list(filter?: { status?: TicketStatus }): Promise<Ticket[]> {

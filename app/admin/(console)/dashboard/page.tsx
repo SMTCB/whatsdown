@@ -63,7 +63,7 @@ export default async function DashboardPage() {
               {stats.rows.map((r) => (
                 <tr key={r.id}>
                   <td className="px-3 py-2">
-                    <Link href={`/tickets/${r.id}`}>#{r.number}</Link> {r.title}
+                    <Link href={`/admin/tickets/${r.id}`}>#{r.number}</Link> {r.title}
                   </td>
                   <td className="px-3 py-2">{r.status.replaceAll("_", " ")}</td>
                   <td className={`px-3 py-2 ${BUDGET_STYLE[r.budget]}`}>

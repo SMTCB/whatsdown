@@ -5,6 +5,8 @@ export type Actor = "agent" | "owner" | "system" | "reporter";
 export interface Ticket {
   id: string;
   number: number;
+  /** Long random secret for the reporter's private status link. Never listed publicly. */
+  publicToken: string;
   projectId: string;
   title: string;
   body: string;
@@ -44,6 +46,9 @@ export interface NewTicket {
 export interface TicketStore {
   create(input: NewTicket): Promise<Ticket>;
   get(id: string): Promise<Ticket | null>;
+  getByToken(token: string): Promise<Ticket | null>;
+  /** Adds a reporter follow-up to the ticket text so the agents see it. */
+  appendDetails(id: string, text: string): Promise<Ticket>;
   list(filter?: { status?: TicketStatus }): Promise<Ticket[]>;
   events(ticketId: string): Promise<TicketEvent[]>;
   /** Atomically update status and append the matching event. */

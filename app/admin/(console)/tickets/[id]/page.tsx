@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { after } from "next/server";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -7,8 +9,11 @@ import { formatSize } from "@/lib/attachments/rules";
 import { advance, decideGate1, MergeBlockedError, resolveGate2, type Gate1Decision, type Gate2Decision } from "@/lib/pipeline/runner";
 
 export const dynamic = "force-dynamic";
-/** Approving a plan runs the Developer, the GitHub checks and QA inside one request. */
+/** Approving a plan starts the Developer, the GitHub checks and QA after the response is sent. */
 export const maxDuration = 300;
+
+/** Statuses where an agent is working, so the page keeps itself fresh. */
+const RUNNING = ["new", "triaged", "diagnosing", "patching", "in_qa", "merged", "notified"];
 
 const GATE1: Gate1Decision[] = ["approve", "revise", "reject"];
 const GATE2: Gate2Decision[] = ["merge", "close"];
@@ -19,9 +24,9 @@ async function gate1(decision: Gate1Decision, formData: FormData) {
   if (!GATE1.includes(decision)) throw new Error("Invalid decision");
   const note = String(formData.get("note") ?? "").trim() || undefined;
   await decideGate1(getStore(), id, decision, note);
-  await advance(getPipeline(), id);
-  revalidatePath(`/tickets/${id}`);
-  revalidatePath("/tickets");
+  after(() => advance(getPipeline(), id).then(() => undefined));
+  revalidatePath(`/admin/tickets/${id}`);
+  revalidatePath("/admin/tickets");
 }
 
 async function gate2(decision: Gate2Decision, formData: FormData) {
@@ -33,11 +38,11 @@ async function gate2(decision: Gate2Decision, formData: FormData) {
     await resolveGate2(pipeline, id, decision);
   } catch (err) {
     if (!(err instanceof MergeBlockedError)) throw err;
-    redirect(`/tickets/${id}?blocked=${encodeURIComponent(err.reason)}${err.url ? `&pr=${encodeURIComponent(err.url)}` : ""}`);
+    redirect(`/admin/tickets/${id}?blocked=${encodeURIComponent(err.reason)}${err.url ? `&pr=${encodeURIComponent(err.url)}` : ""}`);
   }
-  await advance(pipeline, id);
-  revalidatePath(`/tickets/${id}`);
-  revalidatePath("/tickets");
+  after(() => advance(pipeline, id).then(() => undefined));
+  revalidatePath(`/admin/tickets/${id}`);
+  revalidatePath("/admin/tickets");
 }
 
 const h2 = "mb-2 font-[family-name:var(--font-heading)] text-lg font-semibold";
@@ -61,6 +66,7 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
 
   return (
     <div className="flex flex-col gap-5">
+      {RUNNING.includes(ticket.status) && <AutoRefresh />}
       <div>
         <p className="hint">Ticket #{ticket.number}</p>
         <h1 className="mb-2 text-3xl font-semibold">{ticket.title}</h1>
@@ -102,7 +108,7 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
 
       {ticket.status === "duplicate" && dupOf && (
         <p className="card">
-          This looks like a duplicate of <Link href={`/tickets/${dupOf.id}`}>ticket #{dupOf.number}</Link>, which is already being handled.
+          This looks like a duplicate of <Link href={`/admin/tickets/${dupOf.id}`}>ticket #{dupOf.number}</Link>, which is already being handled.
         </p>
       )}
 
@@ -168,7 +174,7 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
         </section>
       )}
 
-      <p className="hint">Demo mode: the agents are placeholders until real keys and the sandbox are connected.</p>
+      <p className="hint">Every merge needs your approval at Gate 2; nothing reaches the project without it.</p>
 
       <section>
         <h2 className={h2}>History</h2>

@@ -38,6 +38,25 @@ export function runStoreContract(name: string, make: () => TicketStore | Promise
       expect(b.id).not.toBe(a.id);
     });
 
+    it("gives each ticket a long private token that finds only that ticket", async () => {
+      const a = await store.create(input);
+      const b = await store.create(input);
+      expect(a.publicToken.length).toBeGreaterThanOrEqual(32);
+      expect(a.publicToken).not.toBe(b.publicToken);
+      expect((await store.getByToken(a.publicToken))?.id).toBe(a.id);
+      expect(await store.getByToken("nope")).toBeNull();
+      expect(await store.getByToken("")).toBeNull();
+    });
+
+    it("appends reporter details to the ticket text", async () => {
+      const t = await store.create(input);
+      const out = await store.appendDetails(t.id, "It happens on Safari");
+      expect(out.body).toContain(input.body);
+      expect(out.body).toContain("It happens on Safari");
+      expect((await store.get(t.id))?.body).toBe(out.body);
+      await expect(store.appendDetails("00000000-0000-4000-8000-000000000000", "x")).rejects.toThrow();
+    });
+
     it("records a created event", async () => {
       const t = await store.create(input);
       const ev = await store.events(t.id);

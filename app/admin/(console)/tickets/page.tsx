@@ -19,7 +19,7 @@ export default async function TicketsPage() {
         <ul className="card divide-y divide-[var(--line)] !p-0">
           {tickets.map((t) => (
             <li key={t.id}>
-              <Link href={`/tickets/${t.id}`} className="flex min-h-14 items-center justify-between gap-4 px-4 py-3 !text-[var(--ink)] no-underline hover:bg-[var(--subtle)]">
+              <Link href={`/admin/tickets/${t.id}`} className="flex min-h-14 items-center justify-between gap-4 px-4 py-3 !text-[var(--ink)] no-underline hover:bg-[var(--subtle)]">
                 <span>
                   <span className="mr-2 text-[var(--muted)]">#{t.number}</span>
                   {t.title}
