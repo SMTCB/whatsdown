@@ -68,7 +68,8 @@ function detectKind(name: string, bytes: Uint8Array): AttachmentKind | null {
 export function validateUploads(files: readonly UploadCandidate[]): UploadCheck {
   const accepted: AcceptedUpload[] = [];
   const errors: string[] = [];
-  const real = files.filter((f) => f.bytes.length > 0 || f.name !== "");
+  // An untouched file input arrives empty, named "" or (from Next server actions) "undefined".
+  const real = files.filter((f) => f.bytes.length > 0 || (f.name !== "" && f.name !== "undefined"));
   if (real.length > ATTACH_LIMITS.maxFiles) {
     errors.push(`You can attach up to ${ATTACH_LIMITS.maxFiles} files.`);
     return { accepted, errors };

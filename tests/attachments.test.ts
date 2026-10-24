@@ -42,6 +42,8 @@ describe("validateUploads", () => {
 
   it("ignores the empty entry browsers send when no file is chosen", () => {
     expect(validateUploads([{ name: "", bytes: new Uint8Array() }])).toEqual({ accepted: [], errors: [] });
+    // Next server actions name that empty entry "undefined".
+    expect(validateUploads([{ name: "undefined", bytes: new Uint8Array() }])).toEqual({ accepted: [], errors: [] });
   });
 });
 
