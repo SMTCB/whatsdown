@@ -85,7 +85,10 @@ export async function locate(
   source: CodeSource,
   ticket: Pick<Ticket, "title" | "body">,
   triage?: { type: string; area: string },
+  /** Overrides for LOCATE_LIMITS, e.g. a wider excerpt on a second attempt. */
+  more: Partial<typeof LOCATE_LIMITS> = {},
 ): Promise<CodeContext> {
+  const limits = { ...LOCATE_LIMITS, ...more };
   const all = await source.tree();
   const known = new Set(all);
   let paths = candidatePaths(all);
@@ -94,7 +97,7 @@ export async function locate(
   for (const p of DOC_PATHS) {
     if (!known.has(p)) continue;
     const text = await source.read(p);
-    if (text) docs.push({ path: p, content: clip(text, LOCATE_LIMITS.docChars) });
+    if (text) docs.push({ path: p, content: clip(text, limits.docChars) });
   }
   const guide = docs.map((d) => `<guide path="${d.path}">\n${d.content}\n</guide>`).join("\n");
   const offered = new Set(paths);
@@ -109,14 +112,14 @@ export async function locate(
   const triageLine = triage ? `Triage: ${triage.type}, area ${triage.area}\n` : "";
   const reportBlock = `${triageLine}<report>\nTitle: ${ticket.title}\n\n${ticket.body}\n</report>`;
 
-  if (paths.length > LOCATE_LIMITS.maxPathsPerStage) {
+  if (paths.length > limits.maxPathsPerStage) {
     const counts = new Map<string, number>();
     for (const p of paths) counts.set(groupOf(p), (counts.get(groupOf(p)) ?? 0) + 1);
     const listing = [...counts].map(([dir, n]) => `${dir} (${n} files)`);
     const prompt = `${guide}\n\n${reportBlock}\n\n${block("directories", listing)}`;
     const { data } = await runStructured(ctx, "locate", DIRS_SYSTEM, prompt, dirsSchema);
-    const chosen = new Set(data.dirs.filter((d) => counts.has(d)).slice(0, LOCATE_LIMITS.maxDirs));
-    paths = paths.filter((p) => chosen.has(groupOf(p))).slice(0, LOCATE_LIMITS.maxPathsPerStage);
+    const chosen = new Set(data.dirs.filter((d) => counts.has(d)).slice(0, limits.maxDirs));
+    paths = paths.filter((p) => chosen.has(groupOf(p))).slice(0, limits.maxPathsPerStage);
     for (const h of hits) if (!paths.includes(h.path)) paths.unshift(h.path);
   }
 
@@ -132,12 +135,12 @@ export async function locate(
     unused.push(...dead);
     let total = 0;
     for (const p of ordered) {
-      if (files.length >= LOCATE_LIMITS.maxFiles || total >= LOCATE_LIMITS.totalChars) break;
+      if (files.length >= limits.maxFiles || total >= limits.totalChars) break;
       if (dead.has(p)) continue;
       const text = await source.read(p);
       if (text === null) continue;
       const matched = hits.find((h) => h.path === p)?.matched;
-      const room = Math.min(matched ? LOCATE_LIMITS.matchedFileChars : LOCATE_LIMITS.fileChars, LOCATE_LIMITS.totalChars - total);
+      const room = Math.min(matched ? limits.matchedFileChars : limits.fileChars, limits.totalChars - total);
       const content = matched ? excerptWithCallees(text, matched, room) : clip(text, room);
       files.push({ path: p, content, ...(matched ? { matched } : {}), ...(text.length > room ? { outline: outline(text) } : {}) });
       total += content.length;

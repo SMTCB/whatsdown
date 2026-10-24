@@ -1,6 +1,6 @@
 import { unusedFiles } from "@/lib/code/imports";
 import { checkQuotes, type Quote } from "@/lib/code/evidence";
-import { locate } from "@/lib/code/locate";
+import { locate, LOCATE_LIMITS } from "@/lib/code/locate";
 import type { CodeSource } from "@/lib/code/source";
 import { communicate } from "@/lib/agents/communicator";
 import { describeScreenshot, MAX_IMAGE_BYTES } from "@/lib/agents/describe-image";
@@ -33,6 +33,9 @@ export interface AgentNodeDeps {
   /** Delivers a message to the reporter (web page, WhatsApp). Defaults to doing nothing. */
   send?: (ticket: Ticket, message: string) => Promise<void>;
 }
+
+/** Second-attempt excerpt sizes: still inside Groq free-tier request limits. */
+const WIDE_LIMITS = { matchedFileChars: LOCATE_LIMITS.matchedFileChars + 3_000, totalChars: LOCATE_LIMITS.totalChars + 3_000 };
 
 /** Wires the real agents into the pipeline's node slots. */
 export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
@@ -90,6 +93,12 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
       const t = triaged?.type && triaged.severity && triaged.area ? { type: triaged.type, severity: triaged.severity, area: triaged.area } : undefined;
       const code = deps.code ? await locate(await ctxFor(ticket), deps.code, ticket, t) : undefined;
       let r = await diagnose(await ctxFor(ticket), ticket, t, note, code);
+      let shown = code;
+      if (deps.code && !r.located && code?.files.some((f) => f.matched?.length)) {
+        // The model said the code is not in the excerpt: show it a wider one before giving up.
+        shown = await locate(await ctxFor(ticket), deps.code, ticket, t, WIDE_LIMITS);
+        r = await diagnose(await ctxFor(ticket), ticket, t, note, shown, "Your last answer said the code was not shown. More of each matched file is shown now, including the functions it calls. Look again.");
+      }
       // A diagnosis has to show the code it rests on. Quotes that are not in the file mean the model guessed.
       let proof = { verified: [] as Quote[], rejected: [] as Quote[] };
       if (deps.code && r.located) {
@@ -97,7 +106,7 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
         proof = await checkQuotes(read, r.evidence);
         if (proof.verified.length === 0) {
           const hint = `Your last answer gave no evidence that could be found in the files. Quote 1 to 4 exact lines of the code shown that cause the problem, copied character for character.`;
-          r = await diagnose(await ctxFor(ticket), ticket, t, note, code, hint);
+          r = await diagnose(await ctxFor(ticket), ticket, t, note, shown, hint);
           if (r.located) proof = await checkQuotes(read, r.evidence);
         }
       }
@@ -111,11 +120,15 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
       }
       const picked = await filesToPatch(r.suspectedFiles, code?.files.map((f) => f.path) ?? []);
       const ignored = [...new Set([...(code?.unused ?? []), ...picked.dead])];
+      // The screen text was found in some files, yet the plan changes none of them: the plan may be about something else.
+      const hitFiles = (shown?.files ?? []).filter((f) => f.matched?.length).map((f) => f.path);
+      const offScreen = hitFiles.length > 0 && !picked.files.some((p) => hitFiles.includes(p));
       const evidence = proof.verified.map((q) => `${q.path}:\n${q.quote.trim()}`).join("\n\n");
       const parts = [
         deps.code && proof.verified.length === 0
           ? "Not verified: I could not back this diagnosis with a line of code that exists in the file. Treat the cause below as a guess and check it before approving."
           : "",
+        offScreen ? `Check: the text on your screen was found in ${hitFiles.join(", ")}, but this plan changes other files. Make sure it is the right place.` : "",
         r.plan,
         r.trace ? `How I found it: ${r.trace}` : "",
         evidence ? `Code this is based on (checked against the file):\n${evidence}` : "",

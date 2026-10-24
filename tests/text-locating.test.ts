@@ -23,7 +23,8 @@ function renderScoreRow(r) {
 `;
 const repo = {
   "CLAUDE.md": "Fantasy app guide",
-  "src/main.jsx": "import { RecapView } from './components/league/RecapView';",
+  "src/main.jsx": "import { RecapView } from './components/league/RecapView';\nimport './util';",
+  "src/util.js": "export const pad = (n) => String(n).padStart(2, '0');",
   "src/components/league/RecapView.jsx": recapView,
   "src/components/RecapCard.jsx": "export const RecapCard = () => <div style={{ minHeight: 100 }}>card</div>;",
 };
@@ -184,10 +185,34 @@ describe("diagnose and develop with a trace", () => {
     const { nodes, t } = await nodesFor([
       reply(JSON.stringify({ files: [] })),
       reply(JSON.stringify({ plan: "The row code is not in the files shown.", suspectedFiles: [], risk: "low", located: false })),
+      reply(JSON.stringify({ files: [] })),
+      reply(JSON.stringify({ plan: "The row code is not in the files shown.", suspectedFiles: [], risk: "low", located: false })),
     ]);
     const r = await nodes.diagnose(t);
     expect(r.files).toEqual([]);
     expect(r.plan).toContain("I could not find where this lives");
+  });
+
+  it("looks again with a wider excerpt when the first answer says the code was not shown", async () => {
+    const { nodes, t, client } = await nodesFor([
+      reply(JSON.stringify({ files: [] })),
+      reply(JSON.stringify({ plan: "Not in the excerpt.", suspectedFiles: [], risk: "low", located: false })),
+      reply(JSON.stringify({ files: [] })),
+      guess([{ path: "src/components/league/RecapView.jsx", quote: "return <tr>{r.points}</tr>;" }]),
+    ]);
+    const r = await nodes.diagnose(t);
+    expect(client.requests.at(-1)?.prompt).toContain("said the code was not shown");
+    expect(r.plan).not.toContain("I could not find");
+    expect(r.files).toEqual(["src/components/league/RecapView.jsx"]);
+  });
+
+  it("warns when the screen text was found in files the plan does not change", async () => {
+    const { nodes, t } = await nodesFor([
+      reply(JSON.stringify({ files: [] })),
+      reply(JSON.stringify({ plan: "Resize the card.", suspectedFiles: ["src/util.js"], risk: "low", trace: "x", located: true, evidence: [{ path: "src/util.js", quote: "export const pad = (n)" }] })),
+    ]);
+    const r = await nodes.diagnose(t);
+    expect(r.plan).toContain("Check: the text on your screen was found in src/components/league/RecapView.jsx, src/main.jsx");
   });
 
   it("develop fails clearly, without asking the model, when the plan names no file", async () => {
