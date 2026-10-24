@@ -23,7 +23,7 @@ async function submitReport(_prev: ReportState, formData: FormData): Promise<Rep
   const ticket = await getStore().create({ projectId: DEMO_PROJECT_ID, ...parsed.data, channel: "web" });
   for (const file of uploads.accepted) await getAttachments().add(ticket.id, file);
   await advance(getPipeline(), ticket.id);
-  redirect(`/tickets/${ticket.id}`);
+  redirect(`/report/thanks?n=${ticket.number}`);
 }
 
 export default function ReportPage() {

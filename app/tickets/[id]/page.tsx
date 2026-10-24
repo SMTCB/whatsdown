@@ -7,6 +7,8 @@ import { formatSize } from "@/lib/attachments/rules";
 import { advance, decideGate1, MergeBlockedError, resolveGate2, type Gate1Decision, type Gate2Decision } from "@/lib/pipeline/runner";
 
 export const dynamic = "force-dynamic";
+/** Approving a plan runs the Developer, the GitHub checks and QA inside one request. */
+export const maxDuration = 300;
 
 const GATE1: Gate1Decision[] = ["approve", "revise", "reject"];
 const GATE2: Gate2Decision[] = ["merge", "close"];

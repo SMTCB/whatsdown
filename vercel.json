@@ -1,0 +1,3 @@
+{
+  "git": { "deploymentEnabled": { "whatsdown/**": false } }
+}
