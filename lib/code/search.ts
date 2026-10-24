@@ -15,18 +15,21 @@ export function uiStrings(text: string, max = 8): string[] {
     // Drop quote marks and a short "Label:" lead-in ("Page hint top-right: ...") so only the words on screen remain.
     const s = raw.replace(/["“”]/g, "").replace(/\s+/g, " ").trim().replace(/^[-*•\s]+|[:.\s]+$/g, "").replace(/^[A-Za-z][A-Za-z -]{1,30}:\s+(?=\S)/, "");
     if (s.length < 4 || s.length > 50 || letters(s) < 3 || s.split(" ").length > 6) return;
+    // "No visible buttons", "Not visible": the reader describing what is absent, not text on screen.
+    if (/^(no|not) (visible|buttons?|tabs?|filters?)/i.test(s)) return;
     if (COMMON.has(s.toLowerCase()) || out.some((o) => o.toLowerCase() === s.toLowerCase())) return;
     out.push(s);
   };
-  const [typed = "", described] = text.split("[Read automatically from the attached screenshot");
+  const [typed = "", ...described] = text.split("[Read automatically from the attached screenshot");
   for (const m of typed.matchAll(/["“”«]([^"“”»\n]{3,50})["“”»]/g)) add(m[1]!);
-  if (described) {
-    // The first line is the reader's own header (file name and a caveat), not screen text.
-    for (const line of described.split("\n").slice(1)) {
-      const body = line.replace(/^\s*(Screen|Controls|Table|Highlighted)\s*:/i, "");
-      for (const part of body.split(/[·|,;•]|\s[-–—]\s/)) add(part);
-    }
-  }
+  // Every attached screenshot counts, not just the first. The first line of each is the reader's own header
+  // (file name and a caveat), not screen text.
+  const lines = described.flatMap((d) => d.split("\n").slice(1));
+  const parts = (line: string) => line.replace(/^\s*(Screen|Controls|Table|Highlighted)\s*:/i, "").split(/[·|,;•]|\s[-–—]\s/);
+  // Column headings are the most distinctive text on a screen, so they are searched before anything else.
+  const isHeading = (line: string) => /^[\s*-]*(column )?(headings?|headers?)\b/i.test(line);
+  for (const line of lines.filter(isHeading)) for (const part of parts(line)) add(part);
+  for (const line of lines.filter((l) => !isHeading(l))) for (const part of parts(line)) add(part);
   return out.slice(0, max);
 }
 
@@ -66,11 +69,18 @@ export function excerptAround(content: string, needles: readonly string[], max: 
   if (content.length <= max) return content;
   const lower = content.toLowerCase();
   let at = -1;
+  let rarest = Infinity;
   for (const n of needles) {
     // A function name points at where it is defined, not at the first place it is called.
     const def = /^[A-Za-z_$][\w$]*$/.test(n) ? new RegExp(`(?:function\\s+|(?:const|let)\\s+)${n.replace(/\$/g, "\\$")}\\b`).exec(content) : null;
     const i = def ? def.index : lower.indexOf(n.toLowerCase());
-    if (i !== -1 && (at === -1 || i < at)) at = i;
+    if (i === -1) continue;
+    // Text that appears once in the file says more about where to look than a word used all over it.
+    const uses = def ? 1 : lower.split(n.toLowerCase()).length - 1;
+    if (at === -1 || uses < rarest || (uses === rarest && i < at)) {
+      at = i;
+      rarest = uses;
+    }
   }
   if (at === -1) return content.slice(0, max);
   let start = Math.max(0, at - Math.floor(max / 3));

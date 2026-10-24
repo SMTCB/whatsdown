@@ -32,6 +32,14 @@ const description =
   '[Read automatically from the attached screenshot "shot.png" (file f1). The reporter did not type this; the reader can make small mistakes.]\nScreen: Recap · gw 2\nTable: Matchday scores | Click row for breakdown';
 const ticket = { title: "Different size in recap window", body: `Rows have different heights.\n\n${description}` };
 
+describe("excerptAround rarest text", () => {
+  it("centres on text that appears once rather than a word used earlier and often", () => {
+    const filler = Array.from({ length: 80 }, (_, i) => `const manager${i} = manager;`).join("\n");
+    const content = `${filler}\n<th>W-D-L</th>\n${filler}`;
+    expect(excerptAround(content, ["MANAGER", "W-D-L"], 600)).toContain("<th>W-D-L</th>");
+  });
+});
+
 describe("uiStrings", () => {
   it("takes quoted text and fragments of the screenshot description, not generic words", () => {
     const s = uiStrings(`The "Save changes" button is off.\n\n${description}`);
@@ -43,6 +51,14 @@ describe("uiStrings", () => {
       ['[Read automatically from the attached screenshot "a.jpg" (file f).]', "Screen: Recap", "Controls:", '- Round tabs: "1", "2"', '- Page hint top-right: "Click row for breakdown"'].join("\n"),
     );
     expect(s).toEqual(["Recap", "Click row for breakdown"]);
+  });
+
+  it("reads every screenshot and searches column headings first", () => {
+    const first = ['[Read automatically from the attached screenshot "a.jpg" (file 1).]', "Screen: A list of match results", "Controls: No visible buttons, tabs, or filters.", "Table:", "- Rows:", '    - "L Fonzinho", "23 - 54"'].join("\n");
+    const second = ['[Read automatically from the attached screenshot "b.jpg" (file 2).]', "Screen: Standings", "Table:", "- Column headings: #, MANAGER, W-D-L, H2H"].join("\n");
+    const s = uiStrings(`W-D-L is wrong.\n\n${first}\n\n${second}`);
+    expect(s.slice(0, 2)).toEqual(["MANAGER", "W-D-L"]);
+    expect(s).not.toContain("No visible buttons");
   });
 
   it("returns nothing for a report with no screen text", () => {
