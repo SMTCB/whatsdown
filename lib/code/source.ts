@@ -38,6 +38,9 @@ const TREE_TTL_MS = 10 * 60_000;
  * Reads a GitHub repository over HTTPS. Public repos need no token; a token (read-only) only
  * raises the API rate limit and allows private repos.
  */
+/** How long to wait before retrying a search that hit GitHub's rate limit. */
+const SEARCH_RETRY_MS = 8_000;
+
 export class GitHubCodeSource implements CodeSource {
   private cached?: { at: number; paths: string[] };
 
@@ -80,9 +83,14 @@ export class GitHubCodeSource implements CodeSource {
   async search(phrase: string): Promise<string[]> {
     const { owner, repo } = this.target;
     const q = `"${phrase.replace(/["\\]/g, " ")}" repo:${owner}/${repo}`;
-    const res = await this.fetchFn(`https://api.github.com/search/code?q=${encodeURIComponent(q)}&per_page=10`, {
-      headers: await this.headers("application/vnd.github+json"),
-    });
+    const url = `https://api.github.com/search/code?q=${encodeURIComponent(q)}&per_page=10`;
+    const ask = async () => this.fetchFn(url, { headers: await this.headers("application/vnd.github+json") });
+    let res = await ask();
+    if (res.status === 403 || res.status === 429) {
+      // Over the per-minute limit: wait a little and try once more rather than give up on the lookup.
+      await new Promise((r) => setTimeout(r, SEARCH_RETRY_MS));
+      res = await ask();
+    }
     if (!res.ok) throw new Error(`GitHub search failed with status ${res.status}`);
     const data = (await res.json()) as { items?: { path: string }[] };
     return (data.items ?? []).map((i) => i.path);

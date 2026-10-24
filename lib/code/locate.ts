@@ -96,7 +96,8 @@ export async function locate(
   }
   const guide = docs.map((d) => `<guide path="${d.path}">\n${d.content}\n</guide>`).join("\n");
   const offered = new Set(paths);
-  const strings = uiStrings(`${ticket.title}\n${ticket.body}`);
+  // GitHub code search allows 10 calls a minute, and the import check needs some of them.
+  const strings = uiStrings(`${ticket.title}\n${ticket.body}`, 5);
   const hits = (await findByText(source, strings, (p) => offered.has(p))).slice(0, 3);
   const searched = strings.map((text) => ({ text, paths: hits.filter((h) => h.matched.includes(text)).map((h) => h.path) }));
   const matches =

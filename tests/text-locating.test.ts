@@ -37,6 +37,13 @@ describe("uiStrings", () => {
     expect(s).toEqual(["Save changes", "Recap", "Matchday scores", "Click row for breakdown"]);
   });
 
+  it("strips quote marks and a short label lead-in from description fragments", () => {
+    const s = uiStrings(
+      ['[Read automatically from the attached screenshot "a.jpg" (file f).]', "Screen: Recap", "Controls:", '- Round tabs: "1", "2"', '- Page hint top-right: "Click row for breakdown"'].join("\n"),
+    );
+    expect(s).toEqual(["Recap", "Click row for breakdown"]);
+  });
+
   it("returns nothing for a report with no screen text", () => {
     expect(uiStrings("Score stuck\nStays at zero after the match")).toEqual([]);
   });

@@ -28,8 +28,21 @@ export const DEMO_REPO = { owner: "SMTCB", repo: "WCFantasyFootball", ref: "main
 
 /** One reader per process so the repository file list stays cached between requests. */
 function getCodeSource() {
-  globalForStore.__whatsdownCode ??= new GitHubCodeSource(DEMO_REPO, process.env.GITHUB_READ_TOKEN?.trim() || undefined);
+  if (!globalForStore.__whatsdownCode) {
+    // Code search needs a signed-in caller, so prefer the GitHub App over anonymous reads.
+    const auth = appAuth();
+    globalForStore.__whatsdownCode = new GitHubCodeSource(DEMO_REPO, auth ? () => auth.token() : process.env.GITHUB_READ_TOKEN?.trim() || undefined);
+  }
   return globalForStore.__whatsdownCode;
+}
+
+function appAuth() {
+  const appId = process.env.GITHUB_APP_ID?.trim();
+  const installationId = process.env.GITHUB_INSTALLATION_ID?.trim();
+  const privateKey = process.env.GITHUB_APP_PRIVATE_KEY?.trim();
+  if (!appId || !installationId || !privateKey) return undefined;
+  globalForStore.__whatsdownAuth ??= new GitHubAppAuth({ appId, installationId, privateKey });
+  return globalForStore.__whatsdownAuth;
 }
 
 /** Cloud sandbox on GitHub Actions; only when the GitHub App is configured. One per process. */

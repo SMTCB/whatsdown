@@ -12,7 +12,8 @@ const letters = (s: string) => (s.match(/\p{L}/gu) ?? []).length;
 export function uiStrings(text: string, max = 8): string[] {
   const out: string[] = [];
   const add = (raw: string) => {
-    const s = raw.replace(/\s+/g, " ").trim().replace(/^[-*•\s]+|[:.\s]+$/g, "");
+    // Drop quote marks and a short "Label:" lead-in ("Page hint top-right: ...") so only the words on screen remain.
+    const s = raw.replace(/["“”]/g, "").replace(/\s+/g, " ").trim().replace(/^[-*•\s]+|[:.\s]+$/g, "").replace(/^[A-Za-z][A-Za-z -]{1,30}:\s+(?=\S)/, "");
     if (s.length < 4 || s.length > 50 || letters(s) < 3 || s.split(" ").length > 6) return;
     if (COMMON.has(s.toLowerCase()) || out.some((o) => o.toLowerCase() === s.toLowerCase())) return;
     out.push(s);
