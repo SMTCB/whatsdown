@@ -15,7 +15,7 @@ export const diagnoseSchema = z.object({
   /** Function names or exact snippets in the files that the fix will change, so the Developer sees that part of the file. */
   anchors: z.array(z.string().max(120)).max(5).default([]),
   /** Lines copied from the code shown that cause the problem; the platform checks each one exists in its file. */
-  evidence: z.array(z.object({ path: z.string().max(200), quote: z.string().min(1).max(400) })).max(4).default([]),
+  evidence: z.array(z.object({ path: z.string().max(200), quote: z.string().min(1).transform((q) => q.slice(0, 600)) })).max(4).default([]),
 });
 
 export type DiagnoseResult = z.infer<typeof diagnoseSchema>;
