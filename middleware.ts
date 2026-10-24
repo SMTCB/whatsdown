@@ -9,14 +9,12 @@ export async function middleware(req: NextRequest) {
   // Without a password the owner pages stay open for local development only.
   if (!password && process.env.NODE_ENV !== "production") return NextResponse.next();
   if (await verifySession(req.cookies.get(SESSION_COOKIE)?.value, password)) {
-    // A signed-in owner who opens the site root lands on the console, not the reporter form.
-    if (pathname === "/") return NextResponse.redirect(new URL("/admin/tickets", req.url));
     return NextResponse.next();
   }
   if (pathname.startsWith("/api/")) return new NextResponse("Owner sign-in required", { status: 401 });
   const url = req.nextUrl.clone();
   url.pathname = "/admin/login";
-  url.search = pathname === "/" || pathname === "/admin" ? "" : `?next=${encodeURIComponent(pathname)}`;
+  url.search = pathname === "/admin" ? "" : `?next=${encodeURIComponent(pathname)}`;
   return NextResponse.redirect(url);
 }
 

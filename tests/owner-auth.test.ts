@@ -4,8 +4,8 @@ import { AttemptLimiter } from "@/lib/auth/throttle";
 
 describe("public paths", () => {
   it("leaves only the report flow, status links, sign-in and the WhatsApp webhook public", () => {
-    for (const p of ["/report", "/report/thanks", "/t/abc123", "/admin/login", "/api/whatsapp", "/api/cron/retry-stalled"]) expect(isPublicPath(p)).toBe(true);
-    for (const p of ["/", "/admin", "/admin/tickets", "/admin/tickets/abc", "/admin/login/x", "/api/attachments/x", "/reports", "/t", "/t/a/b", "/api/whatsapp/x", "/api/cron/other"]) expect(isPublicPath(p)).toBe(false);
+    for (const p of ["/", "/report", "/report/thanks", "/t/abc123", "/admin/login", "/api/whatsapp", "/api/cron/retry-stalled"]) expect(isPublicPath(p)).toBe(true);
+    for (const p of ["/admin", "/admin/tickets", "/admin/tickets/abc", "/admin/login/x", "/api/attachments/x", "/reports", "/t", "/t/a/b", "/api/whatsapp/x", "/api/cron/other"]) expect(isPublicPath(p)).toBe(false);
   });
 });
 
