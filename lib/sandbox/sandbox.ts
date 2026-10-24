@@ -6,9 +6,17 @@ export interface FileChange {
   content: string;
 }
 
+/** What the project's checks ran, for showing to the owner: one entry per job with its steps. */
+export interface CheckReport {
+  /** Where the full logs live (GitHub Actions run page). */
+  url?: string;
+  jobs: { name: string; conclusion: string; steps: { name: string; conclusion: string }[] }[];
+}
+
 export interface CheckResult {
   passed: boolean;
   output: string;
+  report?: CheckReport;
 }
 
 /**

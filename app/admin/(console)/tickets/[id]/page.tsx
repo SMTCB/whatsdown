@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { TICKET_BUDGET_USD, getAttachments, getPipeline, getStore, getUsageLog } from "@/lib/db";
 import { formatSize } from "@/lib/attachments/rules";
+import type { CheckReport } from "@/lib/sandbox/sandbox";
 import { advance, decideGate1, MergeBlockedError, resolveGate2, type Gate1Decision, type Gate2Decision } from "@/lib/pipeline/runner";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +46,9 @@ async function gate2(decision: Gate2Decision, formData: FormData) {
   revalidatePath("/admin/tickets");
 }
 
+const OUTCOME: Record<string, string> = { success: "Passed", failure: "Failed", skipped: "Skipped", cancelled: "Cancelled", unfinished: "Did not finish" };
+const outcome = (c: string) => OUTCOME[c] ?? c;
+
 const h2 = "mb-2 font-[family-name:var(--font-heading)] text-lg font-semibold";
 
 export default async function TicketPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ blocked?: string; pr?: string }> }) {
@@ -61,6 +65,7 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
   const plan = latest("plan");
   const qa = [...events].reverse().find((e) => e.fromStatus === "in_qa")?.payload.summary as string | undefined;
   const question = [...events].reverse().find((e) => e.toStatus === "needs_info")?.payload.question as string | undefined;
+  const checks = [...events].reverse().find((e) => e.fromStatus === "in_qa" && e.payload.checks)?.payload.checks as CheckReport | undefined;
   const error = latest("error");
   const dupId = latest("duplicateOf");
   const dupOf = dupId ? await store.get(dupId) : null;
@@ -133,6 +138,28 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
         <section className="card">
           <h2 className={h2}>QA</h2>
           <p>{qa}</p>
+          {checks && checks.jobs.length > 0 && (
+            <details className="mt-3">
+              <summary className="cursor-pointer font-semibold">Detailed test results</summary>
+              <div className="mt-2 flex flex-col gap-3">
+                {checks.jobs.map((j) => (
+                  <div key={j.name}>
+                    <p className="font-semibold">
+                      {j.name}: <span className="badge">{outcome(j.conclusion)}</span>
+                    </p>
+                    <ul className="mt-1 text-[0.9375rem]">
+                      {j.steps.map((s, i) => (
+                        <li key={`${i}-${s.name}`} className="flex justify-between gap-4 py-0.5">
+                          <span>{s.name}</span>
+                          <span className={s.conclusion === "failure" ? "font-semibold" : "text-[var(--muted)]"}>{outcome(s.conclusion)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
         </section>
       )}
 

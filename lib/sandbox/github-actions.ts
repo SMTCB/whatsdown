@@ -1,7 +1,7 @@
 import { createSign } from "node:crypto";
 import type { CodeSource, RepoRef } from "@/lib/code/source";
 import type { ChangedFile } from "@/lib/guard/diff-guard";
-import { lineCounts, surplus, type CheckResult, type FileChange, type MergeOutcome, type Publisher, type Sandbox } from "./sandbox";
+import { lineCounts, surplus, type CheckReport, type CheckResult, type FileChange, type MergeOutcome, type Publisher, type Sandbox } from "./sandbox";
 
 type Init = { method?: string; headers?: Record<string, string>; body?: string };
 type FetchLike = (url: string, init?: Init) => Promise<Pick<Response, "ok" | "status" | "json" | "text">>;
@@ -231,13 +231,24 @@ export class GitHubActionsSandbox implements Sandbox, Publisher {
   }
 
   private async describe(run: Run): Promise<CheckResult> {
-    if (run.conclusion === "success") return { passed: true, output: `All checks passed on branch ${this.branch}. ${run.html_url}` };
-    const jobs = (await this.call("GET", `/actions/runs/${run.id}/jobs`)) as {
-      jobs: { name: string; conclusion: string | null; steps?: { name: string; conclusion: string | null }[] }[];
+    type ApiJobs = { jobs: { name: string; conclusion: string | null; steps?: { name: string; conclusion: string | null }[] }[] };
+    const passed = run.conclusion === "success";
+    // The step list is only a nicety for a passing run, so a failed lookup must not turn a pass into an error.
+    const jobs = passed
+      ? ((await this.call("GET", `/actions/runs/${run.id}/jobs`).catch(() => undefined)) as ApiJobs | undefined)
+      : ((await this.call("GET", `/actions/runs/${run.id}/jobs`)) as ApiJobs);
+    const report: CheckReport = {
+      url: run.html_url,
+      jobs: (jobs?.jobs ?? []).map((j) => ({
+        name: j.name,
+        conclusion: j.conclusion ?? "unfinished",
+        steps: (j.steps ?? []).map((s) => ({ name: s.name, conclusion: s.conclusion ?? "unfinished" })),
+      })),
     };
-    const failures = jobs.jobs
+    if (passed) return { passed: true, output: `All checks passed on branch ${this.branch}. ${run.html_url}`, report };
+    const failures = (jobs?.jobs ?? [])
       .filter((j) => j.conclusion !== "success" && j.conclusion !== "skipped")
       .map((j) => `${j.name}: failed at "${j.steps?.find((s) => s.conclusion === "failure")?.name ?? "unknown step"}"`);
-    return { passed: false, output: `Checks ${run.conclusion ?? "did not finish"}. ${failures.join("; ")} ${run.html_url}`.trim() };
+    return { passed: false, output: `Checks ${run.conclusion ?? "did not finish"}. ${failures.join("; ")} ${run.html_url}`.trim(), report };
   }
 }

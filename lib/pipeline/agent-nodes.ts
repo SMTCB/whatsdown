@@ -94,7 +94,7 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
       // Passing branches are handed to the owner (Gate 2); keep them out of the next ticket's reset.
       const branch = r.passed ? deps.sandbox.pushedBranch : undefined;
       if (branch) deps.sandbox.keep?.();
-      return { passed: r.passed, summary: r.summary, ...(branch ? { branch } : {}) };
+      return { passed: r.passed, summary: r.summary, ...(branch ? { branch } : {}), ...(r.report ? { checks: r.report } : {}) };
     },
 
     async merge(ticket, branch) {

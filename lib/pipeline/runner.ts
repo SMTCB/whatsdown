@@ -3,7 +3,7 @@ import type { Ticket, TicketStore } from "@/lib/db/store";
 import { transition } from "@/lib/db/transition";
 import type { TriageResult } from "@/lib/agents/triage";
 import { findDuplicate } from "@/lib/domain/duplicates";
-import type { MergeOutcome } from "@/lib/sandbox/sandbox";
+import type { CheckReport, MergeOutcome } from "@/lib/sandbox/sandbox";
 import type { ScreenResult, Screener } from "@/lib/guard/screen";
 
 /**
@@ -14,7 +14,7 @@ export interface PipelineNodes {
   triage(ticket: Ticket): Promise<TriageResult>;
   diagnose(ticket: Ticket): Promise<{ plan: string; files?: string[] }>;
   develop(ticket: Ticket): Promise<{ ok: boolean; summary: string }>;
-  qa(ticket: Ticket): Promise<{ passed: boolean; summary: string; branch?: string }>;
+  qa(ticket: Ticket): Promise<{ passed: boolean; summary: string; branch?: string; checks?: CheckReport }>;
   /** Lands the QA-approved branch on the project. Only called from resolveGate2 after the owner approves. */
   merge?(ticket: Ticket, branch: string): Promise<MergeOutcome>;
   /** Throws the branch away when the owner closes the ticket without merging. */
@@ -87,12 +87,13 @@ export async function advance(deps: PipelineDeps, ticketId: string): Promise<Tic
         }
         case "in_qa": {
           const r = await nodes.qa(ticket);
+          const checks = r.checks ? { checks: r.checks } : {};
           if (r.passed) {
-            await transition(store, ticketId, "awaiting_merge", "agent", "qa passed", { summary: r.summary, ...(r.branch ? { branch: r.branch } : {}) });
+            await transition(store, ticketId, "awaiting_merge", "agent", "qa passed", { summary: r.summary, ...(r.branch ? { branch: r.branch } : {}), ...checks });
           } else {
             const failures = (await store.events(ticketId)).filter((e) => e.fromStatus === "in_qa" && e.toStatus === "patching").length;
-            if (failures >= maxQaRetries) await transition(store, ticketId, "failed", "agent", "qa failed too many times", { summary: r.summary });
-            else await transition(store, ticketId, "patching", "agent", "qa failed, retrying", { summary: r.summary });
+            if (failures >= maxQaRetries) await transition(store, ticketId, "failed", "agent", "qa failed too many times", { summary: r.summary, ...checks });
+            else await transition(store, ticketId, "patching", "agent", "qa failed, retrying", { summary: r.summary, ...checks });
           }
           break;
         }

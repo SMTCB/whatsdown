@@ -97,6 +97,20 @@ describe("GitHubActionsSandbox", () => {
     expect(res.output).toContain('failed at "npm test"');
   });
 
+  it("returns every job and step so the owner can read the results without leaving the app", async () => {
+    const gh = fakeGitHub([[{ status: "completed", conclusion: "success" }]], {
+      jobs: [{ name: "checks", conclusion: "success", steps: [{ name: "npm test", conclusion: "success" }, { name: "npm run lint", conclusion: "success" }] }],
+    });
+    const sb = make(gh);
+    await sb.apply([{ path: "a.js", content: "x" }]);
+    const res = await sb.runChecks();
+    expect(res.passed).toBe(true);
+    expect(res.report).toEqual({
+      url: "https://run",
+      jobs: [{ name: "checks", conclusion: "success", steps: [{ name: "npm test", conclusion: "success" }, { name: "npm run lint", conclusion: "success" }] }],
+    });
+  });
+
   it("fails clearly when no workflow ever runs", async () => {
     const sb = make(fakeGitHub([[]]), 30_000);
     await sb.apply([{ path: "a.js", content: "x" }]);
