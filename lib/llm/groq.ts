@@ -79,8 +79,11 @@ export class GroqClient implements LlmClient {
     if (!res.ok) {
       // Groq's error text names the problem (token limit, bad request); it never contains our key.
       detail = await res.text().then((t) => (JSON.parse(t) as { error?: { message?: string } }).error?.message ?? "", () => "");
-      // gpt-oss sometimes answers with a tool call although none are offered; the next sample is normally fine.
-      if (res.status === 400 && detail.includes("model called a tool")) {
+      // gpt-oss sometimes answers with a tool call although none are offered. At temperature 0 the same sample
+      // would repeat, so the retries vary it.
+      for (const temperature of [0.4, 0.8]) {
+        if (res.status !== 400 || !detail.includes("model called a tool")) break;
+        body.temperature = temperature;
         res = await send();
         if (res.status === 429) throw new RateLimitError("Groq rate limit");
         detail = res.ok ? "" : await res.text().then((t) => (JSON.parse(t) as { error?: { message?: string } }).error?.message ?? "", () => "");

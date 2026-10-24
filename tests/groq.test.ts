@@ -34,14 +34,26 @@ describe("GroqClient", () => {
     expect(calls).toBe(2);
   });
 
-  it("gives up if the second answer is also a bad request", async () => {
+  it("raises the temperature on the resend, since temperature 0 would repeat the same answer", async () => {
+    const temps: unknown[] = [];
+    const replies = [ok({ error: { message: "Tool choice is none, but model called a tool" } }, 400), ok({ choices: [{ message: { content: "fine" } }] })];
+    let calls = 0;
+    const client = new GroqClient(SECRET, async (_url, init) => {
+      temps.push(JSON.parse(String((init as { body: string }).body)).temperature);
+      return replies[calls++]!();
+    });
+    await client.complete({ model: "openai/gpt-oss-120b", system: "s", prompt: "p" });
+    expect(temps).toEqual([0, 0.4]);
+  });
+
+  it("gives up if the answers stay bad requests", async () => {
     let calls = 0;
     const client = new GroqClient(SECRET, async () => {
       calls++;
       return ok({ error: { message: "Tool choice is none, but model called a tool" } }, 400)();
     });
     await expect(client.complete({ model: "openai/gpt-oss-120b", system: "s", prompt: "p" })).rejects.toBeInstanceOf(LlmProviderError);
-    expect(calls).toBe(2);
+    expect(calls).toBe(3);
   });
 
   it("never puts the key in an error message", async () => {
