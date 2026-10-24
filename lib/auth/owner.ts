@@ -1,5 +1,5 @@
 /** Paths anyone may open: the report form, reporter status links, the sign-in page and the signed WhatsApp webhook. */
-const PUBLIC = [/^\/report(\/|$)/, /^\/t\/[^/]+$/, /^\/admin\/login$/, /^\/api\/whatsapp$/];
+const PUBLIC = [/^\/report(\/|$)/, /^\/t\/[^/]+$/, /^\/admin\/login$/, /^\/api\/whatsapp$/, /^\/api\/cron\/retry-stalled$/];
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC.some((re) => re.test(pathname));

@@ -49,6 +49,8 @@ export interface TicketStore {
   getByToken(token: string): Promise<Ticket | null>;
   /** Adds a reporter follow-up to the ticket text so the agents see it. */
   appendDetails(id: string, text: string): Promise<Ticket>;
+  /** Counts one automatic retry of a stalled ticket: bumps retryCount, refreshes updatedAt and logs a "retry" event. */
+  recordRetry(id: string, cause: string): Promise<Ticket>;
   list(filter?: { status?: TicketStatus }): Promise<Ticket[]>;
   events(ticketId: string): Promise<TicketEvent[]>;
   /** Atomically update status and append the matching event. */

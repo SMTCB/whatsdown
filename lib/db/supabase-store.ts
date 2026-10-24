@@ -94,6 +94,11 @@ export class SupabaseStore implements TicketStore {
     return toTicket(row!);
   }
 
+  async recordRetry(id: string, cause: string): Promise<Ticket> {
+    const row = check<TicketRow>(await this.db.rpc("record_retry", { p_id: id, p_cause: cause }));
+    return toTicket(row!);
+  }
+
   async list(filter?: { status?: TicketStatus }): Promise<Ticket[]> {
     let q = this.db.from("tickets").select("*").order("number", { ascending: false });
     if (filter?.status) q = q.eq("status", filter.status);

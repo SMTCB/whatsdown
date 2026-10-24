@@ -11,14 +11,15 @@ export interface ModelInfo {
 }
 
 // Prices are placeholders to be checked against the provider price pages before real use.
-// Groq free-tier models are priced at 0; verify the limits in the Groq console.
+// Groq models run on the free tier, so nothing is billed. The prices below are Groq's list prices, used as a
+// virtual cost so each ticket still shows what it would cost on a paid plan. Check them against the Groq price page.
 export const MODELS = {
   "claude-opus-5-5": { provider: "anthropic", model: "claude-opus-5-5", inputPerM: 4, outputPerM: 20, cacheReadFactor: 0.1 },
   "claude-sonnet-5-5": { provider: "anthropic", model: "claude-sonnet-5-5", inputPerM: 2, outputPerM: 10, cacheReadFactor: 0.1 },
   "claude-haiku-5-5": { provider: "anthropic", model: "claude-haiku-5-5", inputPerM: 0.1, outputPerM: 0.5, cacheReadFactor: 0.1 },
-  "openai/gpt-oss-20b": { provider: "groq", model: "openai/gpt-oss-20b", inputPerM: 0, outputPerM: 0, cacheReadFactor: 1 },
-  "openai/gpt-oss-120b": { provider: "groq", model: "openai/gpt-oss-120b", inputPerM: 0, outputPerM: 0, cacheReadFactor: 1 },
-  "qwen/qwen3.8-27b": { provider: "groq", model: "qwen/qwen3.8-27b", inputPerM: 0, outputPerM: 0, cacheReadFactor: 1 },
+  "openai/gpt-oss-20b": { provider: "groq", model: "openai/gpt-oss-20b", inputPerM: 0.075, outputPerM: 0.3, cacheReadFactor: 1 },
+  "openai/gpt-oss-120b": { provider: "groq", model: "openai/gpt-oss-120b", inputPerM: 0.15, outputPerM: 0.6, cacheReadFactor: 1 },
+  "qwen/qwen3.8-27b": { provider: "groq", model: "qwen/qwen3.8-27b", inputPerM: 0.29, outputPerM: 0.59, cacheReadFactor: 1 },
   "meta-llama/llama-prompt-guard-2-86m": { provider: "groq", model: "meta-llama/llama-prompt-guard-2-86m", inputPerM: 0, outputPerM: 0, cacheReadFactor: 1 },
   "whisper-large-v3-turbo": { provider: "groq", model: "whisper-large-v3-turbo", inputPerM: 0, outputPerM: 0, cacheReadFactor: 1 },
 } as const satisfies Record<string, ModelInfo>;

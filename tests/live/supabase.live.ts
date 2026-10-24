@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import { SupabaseAttachmentStore } from "@/lib/attachments/supabase-store";
 import { SupabaseStore } from "@/lib/db/supabase-store";
+import { SupabaseUsageLog } from "@/lib/llm/supabase-usage";
 import { runStoreContract } from "../store.contract";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
@@ -32,5 +33,16 @@ describe.skipIf(!db)("Supabase (live)", () => {
     expect(new TextDecoder().decode(got!.bytes)).toBe("error log line");
     expect(await store.get("00000000-0000-4000-8000-000000000000")).toBeNull();
     await db!.from("tickets").delete().eq("id", t.id);
+  });
+
+  it("records usage and totals it per ticket", async () => {
+    const t = await new SupabaseStore(db!).create({ projectId: "p1", title: "Usage", body: "Costs something" });
+    const log = new SupabaseUsageLog(db!);
+    await log.record({ ticketId: t.id, task: "triage", model: "openai/gpt-oss-20b", usage: { inputTokens: 1000, outputTokens: 200 }, costUsd: 0.000135 });
+    await log.record({ ticketId: t.id, task: "diagnose", model: "openai/gpt-oss-120b", usage: { inputTokens: 5000, outputTokens: 800 }, costUsd: 0.00123 });
+    expect(await log.totalFor(t.id)).toBeCloseTo(0.001365, 6);
+    expect((await log.all()).filter((r) => r.ticketId === t.id)).toHaveLength(2);
+    await db!.from("tickets").delete().eq("id", t.id);
+    expect(await log.totalFor(t.id)).toBe(0);
   });
 });

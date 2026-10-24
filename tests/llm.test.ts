@@ -9,8 +9,8 @@ describe("pricing", () => {
   it("charges cached input at a discount", () => {
     expect(costUsd("claude-opus-5-5", { inputTokens: 0, outputTokens: 0, cacheReadTokens: 1_000_000 })).toBeCloseTo(0.4);
   });
-  it("treats Groq models as free", () => {
-    expect(costUsd("openai/gpt-oss-20b", { inputTokens: 5_000_000, outputTokens: 5_000_000 })).toBe(0);
+  it("gives Groq models a virtual cost from list prices", () => {
+    expect(costUsd("openai/gpt-oss-20b", { inputTokens: 5_000_000, outputTokens: 5_000_000 })).toBeCloseTo(1.875);
   });
 });
 

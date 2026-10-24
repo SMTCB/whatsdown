@@ -8,7 +8,8 @@ import type { TicketStore } from "./store";
 import { demoNodes } from "@/lib/pipeline/demo-nodes";
 import { GroqScreener } from "@/lib/guard/groq-screener";
 import { RuleScreener } from "@/lib/guard/screen";
-import { MemoryUsageLog } from "@/lib/llm/client";
+import { MemoryUsageLog, type UsageLog } from "@/lib/llm/client";
+import { SupabaseUsageLog } from "@/lib/llm/supabase-usage";
 import { groqFromEnv } from "@/lib/llm/groq";
 import { GitHubCodeSource } from "@/lib/code/source";
 import { GitHubActionsSandbox, GitHubAppAuth } from "@/lib/sandbox/github-actions";
@@ -45,7 +46,7 @@ export const DEMO_PROJECT_ID = "forza-fantasy-league";
 /** USD allowed per ticket before the agents stop. */
 export const TICKET_BUDGET_USD = 1.5;
 
-const globalForStore = globalThis as unknown as { __whatsdownStore?: TicketStore; __whatsdownUsage?: MemoryUsageLog; __whatsdownFiles?: AttachmentStore; __whatsdownCode?: GitHubCodeSource; __whatsdownSandbox?: GitHubActionsSandbox; __whatsdownAuth?: GitHubAppAuth; __whatsdownDb?: SupabaseClient | null };
+const globalForStore = globalThis as unknown as { __whatsdownStore?: TicketStore; __whatsdownUsage?: UsageLog; __whatsdownFiles?: AttachmentStore; __whatsdownCode?: GitHubCodeSource; __whatsdownSandbox?: GitHubActionsSandbox; __whatsdownAuth?: GitHubAppAuth; __whatsdownDb?: SupabaseClient | null };
 
 /** Supabase client with the service role key (server only); undefined when not configured. */
 export function getDb(): SupabaseClient | undefined {
@@ -64,9 +65,10 @@ export function getAttachments(): AttachmentStore {
   return globalForStore.__whatsdownFiles;
 }
 
-/** Shared usage log; the demo nodes make no model calls, so it stays empty until real agents are wired. */
-export function getUsageLog(): MemoryUsageLog {
-  globalForStore.__whatsdownUsage ??= new MemoryUsageLog();
+/** Model usage and virtual cost per ticket: Supabase when configured, else in memory. */
+export function getUsageLog(): UsageLog {
+  const db = getDb();
+  globalForStore.__whatsdownUsage ??= db ? new SupabaseUsageLog(db) : new MemoryUsageLog();
   return globalForStore.__whatsdownUsage;
 }
 

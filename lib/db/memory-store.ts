@@ -51,6 +51,15 @@ ${text}`;
     return { ...t };
   }
 
+  async recordRetry(id: string, cause: string) {
+    const t = this.tickets.get(id);
+    if (!t) throw new Error(`Ticket ${id} not found`);
+    t.retryCount += 1;
+    t.updatedAt = new Date().toISOString();
+    this.pushEvent(id, "retry", t.status, t.status, "system", { cause, attempt: t.retryCount });
+    return { ...t };
+  }
+
   async list(filter?: { status?: TicketStatus }) {
     return [...this.tickets.values()]
       .filter((t) => !filter?.status || t.status === filter.status)

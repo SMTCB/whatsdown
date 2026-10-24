@@ -57,6 +57,18 @@ export function runStoreContract(name: string, make: () => TicketStore | Promise
       await expect(store.appendDetails("00000000-0000-4000-8000-000000000000", "x")).rejects.toThrow();
     });
 
+    it("counts retries, refreshes updatedAt and logs a retry event", async () => {
+      const t = await store.create(input);
+      const out = await store.recordRetry(t.id, "stalled");
+      expect(out.retryCount).toBe(1);
+      expect(out.status).toBe("new");
+      expect((await store.recordRetry(t.id, "stalled")).retryCount).toBe(2);
+      const ev = (await store.events(t.id)).filter((e) => e.type === "retry");
+      expect(ev).toHaveLength(2);
+      expect(ev[1]).toMatchObject({ actor: "system", fromStatus: "new", toStatus: "new" });
+      await expect(store.recordRetry("00000000-0000-4000-8000-000000000000", "x")).rejects.toThrow();
+    });
+
     it("records a created event", async () => {
       const t = await store.create(input);
       const ev = await store.events(t.id);

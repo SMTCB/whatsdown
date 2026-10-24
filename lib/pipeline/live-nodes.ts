@@ -1,7 +1,7 @@
 import { FANTASY_PROTECTED_PATHS } from "@/lib/guard/diff-guard";
 import type { CodeSource } from "@/lib/code/source";
 import type { TicketStore } from "@/lib/db/store";
-import type { LlmClient, MemoryUsageLog } from "@/lib/llm/client";
+import type { LlmClient, UsageLog } from "@/lib/llm/client";
 import { MemorySandbox, type Publisher, type Sandbox } from "@/lib/sandbox/sandbox";
 import { createAgentNodes } from "./agent-nodes";
 import { demoNodes } from "./demo-nodes";
@@ -10,7 +10,7 @@ import type { PipelineNodes } from "./runner";
 export interface LiveDeps {
   store: TicketStore;
   client: LlmClient;
-  log: MemoryUsageLog;
+  log: UsageLog;
   budgetUsd: number;
   code: CodeSource;
   /** A real cloud sandbox. Without one, Developer and QA stay placeholders. */

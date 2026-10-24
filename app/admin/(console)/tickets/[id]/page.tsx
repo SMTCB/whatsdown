@@ -4,7 +4,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getAttachments, getPipeline, getStore } from "@/lib/db";
+import { TICKET_BUDGET_USD, getAttachments, getPipeline, getStore, getUsageLog } from "@/lib/db";
 import { formatSize } from "@/lib/attachments/rules";
 import { advance, decideGate1, MergeBlockedError, resolveGate2, type Gate1Decision, type Gate2Decision } from "@/lib/pipeline/runner";
 
@@ -55,6 +55,7 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
   if (!ticket) notFound();
   const events = await store.events(id);
   const files = await getAttachments().list(id);
+  const cost = await getUsageLog().totalFor(id);
 
   const latest = (key: string) => [...events].reverse().find((e) => typeof e.payload[key] === "string")?.payload[key] as string | undefined;
   const plan = latest("plan");
@@ -71,7 +72,10 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
         <p className="hint">Ticket #{ticket.number}</p>
         <h1 className="mb-2 text-3xl font-semibold">{ticket.title}</h1>
         <p className="mb-3">
-          Status: <span className="badge">{ticket.status.replaceAll("_", " ")}</span>
+          Status: <span className="badge">{ticket.status.replaceAll("_", " ")}</span>{" "}
+          <span className="hint">
+            Virtual cost ${cost < 0.01 && cost > 0 ? cost.toFixed(4) : cost.toFixed(2)} of ${TICKET_BUDGET_USD.toFixed(2)}
+          </span>
         </p>
         <p className="card whitespace-pre-wrap">{ticket.body}</p>
       </div>

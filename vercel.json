@@ -1,3 +1,4 @@
 {
-  "git": { "deploymentEnabled": { "whatsdown/**": false } }
+  "git": { "deploymentEnabled": { "whatsdown/**": false } },
+  "crons": [{ "path": "/api/cron/retry-stalled", "schedule": "0 6 * * *" }]
 }

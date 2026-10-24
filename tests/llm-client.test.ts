@@ -31,7 +31,7 @@ describe("runTask", () => {
     const client = new FakeLlmClient([new RateLimitError(), reply("ok", { inputTokens: 1_000_000, outputTokens: 0 })]);
     const res = await runTask(ctx(client), "triage", "sys", "hi");
     expect(res.model).toBe("openai/gpt-oss-120b");
-    expect(res.costUsd).toBe(0);
+    expect(res.costUsd).toBeCloseTo(0.15);
   });
 
   it("rethrows when there is no fallback left", async () => {

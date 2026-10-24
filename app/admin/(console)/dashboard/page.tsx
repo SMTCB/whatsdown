@@ -4,7 +4,7 @@ import { summarize } from "@/lib/dashboard/stats";
 
 export const dynamic = "force-dynamic";
 
-const usd = (n: number) => `$${n.toFixed(2)}`;
+const usd = (n: number) => `$${n < 0.01 && n > 0 ? n.toFixed(4) : n.toFixed(2)}`;
 const BUDGET_STYLE = { ok: "text-[var(--muted)]", warn: "text-[var(--warn)] font-semibold", exceeded: "text-[var(--bad)] font-semibold" } as const;
 
 function Stat({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
@@ -21,7 +21,7 @@ export default async function DashboardPage() {
   const store = getStore();
   const tickets = await store.list();
   const events = new Map(await Promise.all(tickets.map(async (t) => [t.id, await store.events(t.id)] as const)));
-  const stats = summarize(tickets, events, getUsageLog().records, TICKET_BUDGET_USD);
+  const stats = summarize(tickets, events, await getUsageLog().all(), TICKET_BUDGET_USD);
 
   return (
     <div>
@@ -36,7 +36,9 @@ export default async function DashboardPage() {
 
       <p className="mb-3">
         Total AI spend: <strong>{usd(stats.totalSpendUsd)}</strong>{" "}
-        <span className="hint">(budget {usd(TICKET_BUDGET_USD)} per ticket; demo mode makes no model calls)</span>
+        <span className="hint">
+          (virtual: the free Groq tier is not billed, this is what the same calls would cost at list prices; budget {usd(TICKET_BUDGET_USD)} per ticket)
+        </span>
       </p>
 
       {stats.rows.length === 0 ? (
@@ -54,7 +56,7 @@ export default async function DashboardPage() {
               <tr>
                 <th scope="col" className="px-3 py-2">Ticket</th>
                 <th scope="col" className="px-3 py-2">Status</th>
-                <th scope="col" className="px-3 py-2">Spend</th>
+                <th scope="col" className="px-3 py-2">Virtual cost</th>
                 <th scope="col" className="px-3 py-2">QA retries</th>
                 <th scope="col" className="px-3 py-2">Notes</th>
               </tr>

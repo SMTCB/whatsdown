@@ -34,8 +34,14 @@ export interface UsageRecord {
   costUsd: number;
 }
 
+type MaybeAsync<T> = T | Promise<T>;
+
+/** Where model usage is kept: in memory for tests and local runs, Supabase when configured. */
 export interface UsageLog {
-  record(r: UsageRecord): void;
+  record(r: UsageRecord): MaybeAsync<void>;
+  /** Virtual USD spent on one ticket so far. */
+  totalFor(ticketId: string): MaybeAsync<number>;
+  all(): MaybeAsync<readonly UsageRecord[]>;
 }
 
 export class MemoryUsageLog implements UsageLog {
@@ -45,6 +51,9 @@ export class MemoryUsageLog implements UsageLog {
   }
   totalFor(ticketId: string): number {
     return this.records.filter((r) => r.ticketId === ticketId).reduce((n, r) => n + r.costUsd, 0);
+  }
+  all(): readonly UsageRecord[] {
+    return this.records;
   }
 }
 
@@ -75,7 +84,7 @@ export async function runTask(ctx: TaskContext, task: Task, system: string, prom
     try {
       const res = await ctx.client.complete({ model, system, prompt, effort: route.effort });
       const cost = costUsd(model, res.usage);
-      ctx.log.record({ ticketId: ctx.ticketId, task, model, usage: res.usage, costUsd: cost });
+      await ctx.log.record({ ticketId: ctx.ticketId, task, model, usage: res.usage, costUsd: cost });
       return { text: res.text, model, costUsd: cost };
     } catch (err) {
       if (!(err instanceof RateLimitError)) throw err;

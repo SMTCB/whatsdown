@@ -7,7 +7,7 @@ import { qa } from "@/lib/agents/qa";
 import { triage, type TriageResult } from "@/lib/agents/triage";
 import type { Ticket, TicketStore } from "@/lib/db/store";
 import type { GuardPolicy } from "@/lib/guard/diff-guard";
-import type { LlmClient, MemoryUsageLog, TaskContext } from "@/lib/llm/client";
+import type { LlmClient, TaskContext, UsageLog } from "@/lib/llm/client";
 import type { Overrides } from "@/lib/llm/router";
 import type { Publisher, Sandbox } from "@/lib/sandbox/sandbox";
 import type { PipelineNodes } from "./runner";
@@ -15,7 +15,7 @@ import type { PipelineNodes } from "./runner";
 export interface AgentNodeDeps {
   store: TicketStore;
   client: LlmClient;
-  log: MemoryUsageLog;
+  log: UsageLog;
   sandbox: Sandbox;
   policy: GuardPolicy;
   budgetUsd: number;
@@ -30,11 +30,11 @@ export interface AgentNodeDeps {
 
 /** Wires the real agents into the pipeline's node slots. */
 export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
-  const ctxFor = (ticket: Ticket): TaskContext => ({
+  const ctxFor = async (ticket: Ticket): Promise<TaskContext> => ({
     client: deps.client,
     log: deps.log,
     ticketId: ticket.id,
-    spentUsd: deps.log.totalFor(ticket.id),
+    spentUsd: await deps.log.totalFor(ticket.id),
     budgetUsd: deps.budgetUsd,
     overrides: deps.overrides,
   });
@@ -58,7 +58,7 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
   };
 
   return {
-    triage: (ticket) => triage(ctxFor(ticket), ticket),
+    triage: async (ticket) => triage(await ctxFor(ticket), ticket),
 
     async diagnose(ticket) {
       const triaged = await latest(ticket, (e) => (e.toStatus === "triaged" ? (e.payload as Partial<TriageResult>) : undefined));
@@ -66,8 +66,8 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
         e.payload.gate === 1 && e.payload.decision === "revise" && typeof e.payload.note === "string" ? e.payload.note : undefined,
       );
       const t = triaged?.type && triaged.severity && triaged.area ? { type: triaged.type, severity: triaged.severity, area: triaged.area } : undefined;
-      const code = deps.code ? await locate(ctxFor(ticket), deps.code, ticket, t) : undefined;
-      const r = await diagnose(ctxFor(ticket), ticket, t, note, code);
+      const code = deps.code ? await locate(await ctxFor(ticket), deps.code, ticket, t) : undefined;
+      const r = await diagnose(await ctxFor(ticket), ticket, t, note, code);
       return {
         plan: `${r.plan}\n\nLikely files: ${r.suspectedFiles.join(", ") || "unknown"}\nRisk: ${r.risk}`,
         files: await filesToPatch(r.suspectedFiles, code?.files.map((f) => f.path) ?? []),
@@ -85,12 +85,12 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
         const content = deps.code ? await deps.code.read(path) : null;
         if (content !== null) original.push({ path, content });
       }
-      const r = await develop(ctxFor(ticket), ticket, plan, deps.sandbox, deps.policy, feedback, original);
+      const r = await develop(await ctxFor(ticket), ticket, plan, deps.sandbox, deps.policy, feedback, original);
       return { ok: r.ok, summary: r.summary };
     },
 
     async qa(ticket) {
-      const r = await qa(ctxFor(ticket), ticket, deps.sandbox);
+      const r = await qa(await ctxFor(ticket), ticket, deps.sandbox);
       // Passing branches are handed to the owner (Gate 2); keep them out of the next ticket's reset.
       const branch = r.passed ? deps.sandbox.pushedBranch : undefined;
       if (branch) deps.sandbox.keep?.();
@@ -112,7 +112,7 @@ ${plan}`.slice(0, 4000);
 
     async notify(ticket) {
       if (!deps.send) return;
-      const message = await communicate(ctxFor(ticket), ticket, "merged");
+      const message = await communicate(await ctxFor(ticket), ticket, "merged");
       await deps.send(ticket, message);
     },
   };
