@@ -28,7 +28,7 @@ Show your trace: "trace" says which text from the screen you looked for and whic
 If the code shown does not contain the place that must change, set "located" to false, leave "suspectedFiles" empty and say in the plan what is missing. Do not propose a change to a nearby file instead.
 "anchors" are the function names or exact lines you will change, so the developer can see them.
 "evidence" proves the cause: copy one to four blocks of code, whole if-else or ternary blocks rather than half of one,, character for character from the code shown, that produce the problem (for example the lines that add the extra text or set the size). The plan must explain how those lines cause what the reporter sees. A quote that is not in the file is rejected, so never paraphrase or invent one.
-Propose the smallest safe fix as a short plan a non-technical owner can approve: what is wrong, what will change, how it will be tested.
+Propose the smallest safe fix as a short plan a non-technical owner can approve: what is wrong, what will change, and a suggested manual check for the reviewer (worded as a suggestion: "Suggested check: ..."). Never write that something will be or was tested, because nothing is run beyond lint, build and browser smoke tests. Also name other places in the shown code that display something similar and say why they are not the one.
 Reply with JSON only: {"plan":"plain-language plan","suspectedFiles":["path"],"risk":"low|medium|high","trace":"searched X, found in file Y function Z","located":true,"anchors":["name"],"evidence":[{"path":"file","quote":"exact code lines"}]}.`;
 
 export async function diagnose(

@@ -93,6 +93,12 @@ describe("develop with edits", () => {
     expect("files" in drift && drift.files.get("f")).toBe("z\n");
   });
 
+  it("keeps the diff to the changed line when the model re-emits a block without its indentation", () => {
+    const src = "      <div>\r\n        <b>{a}</b>\r\n        <i>-{x}-</i>\r\n      </div>\r\nrest\r\n";
+    const out = applyEdits(new Map([["f", src]]), [{ path: "f", find: "<div>\n  <b>{a}</b>\n  <i>-{x}-</i>\n</div>", replace: "<div>\n  <b>{a}</b>\n  <i>-{y}-</i>\n</div>" }]);
+    expect("files" in out && out.files.get("f")).toBe("      <div>\r\n        <b>{a}</b>\r\n        <i>-{y}-</i>\r\n      </div>\r\nrest\r\n");
+  });
+
   it("applyEdits chains edits on the same file and rejects unknown paths", () => {
     const orig = new Map([["f", "abc"]]);
     const ok = applyEdits(orig, [{ path: "f", find: "a", replace: "1" }, { path: "f", find: "c", replace: "3" }]);
