@@ -1,5 +1,8 @@
 import { MemoryAttachmentStore, type AttachmentStore } from "@/lib/attachments/store";
 import { MemoryStore } from "./memory-store";
+import { SupabaseAttachmentStore } from "@/lib/attachments/supabase-store";
+import { SupabaseStore } from "./supabase-store";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { TicketStore } from "./store";
 
 import { demoNodes } from "@/lib/pipeline/demo-nodes";
@@ -42,11 +45,22 @@ export const DEMO_PROJECT_ID = "forza-fantasy-league";
 /** USD allowed per ticket before the agents stop. */
 export const TICKET_BUDGET_USD = 1.5;
 
-const globalForStore = globalThis as unknown as { __whatsdownStore?: TicketStore; __whatsdownUsage?: MemoryUsageLog; __whatsdownFiles?: AttachmentStore; __whatsdownCode?: GitHubCodeSource; __whatsdownSandbox?: GitHubActionsSandbox; __whatsdownAuth?: GitHubAppAuth };
+const globalForStore = globalThis as unknown as { __whatsdownStore?: TicketStore; __whatsdownUsage?: MemoryUsageLog; __whatsdownFiles?: AttachmentStore; __whatsdownCode?: GitHubCodeSource; __whatsdownSandbox?: GitHubActionsSandbox; __whatsdownAuth?: GitHubAppAuth; __whatsdownDb?: SupabaseClient | null };
 
-/** Uploaded documents; in memory until Supabase Storage exists. */
+/** Supabase client with the service role key (server only); undefined when not configured. */
+export function getDb(): SupabaseClient | undefined {
+  if (globalForStore.__whatsdownDb === undefined) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+    globalForStore.__whatsdownDb = url && key ? createClient(url, key, { auth: { persistSession: false } }) : null;
+  }
+  return globalForStore.__whatsdownDb ?? undefined;
+}
+
+/** Uploaded documents: Supabase Storage when configured, else in memory. */
 export function getAttachments(): AttachmentStore {
-  globalForStore.__whatsdownFiles ??= new MemoryAttachmentStore();
+  const db = getDb();
+  globalForStore.__whatsdownFiles ??= db ? new SupabaseAttachmentStore(db) : new MemoryAttachmentStore();
   return globalForStore.__whatsdownFiles;
 }
 
@@ -56,8 +70,9 @@ export function getUsageLog(): MemoryUsageLog {
   return globalForStore.__whatsdownUsage;
 }
 
-/** One store per server process (survives hot reload). Swap for the Supabase store once the hosted project exists. */
+/** One store per server process (survives hot reload): Supabase when configured, else in memory. */
 export function getStore(): TicketStore {
-  globalForStore.__whatsdownStore ??= new MemoryStore();
+  const db = getDb();
+  globalForStore.__whatsdownStore ??= db ? new SupabaseStore(db) : new MemoryStore();
   return globalForStore.__whatsdownStore;
 }
