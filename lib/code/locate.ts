@@ -36,9 +36,9 @@ export const LOCATE_LIMITS = {
   maxPathsPerStage: 250,
   fileChars: 4_000,
   /** A file that holds the on-screen text gets more room: the cause is usually near it or in a function it calls. */
-  matchedFileChars: 9_000,
+  matchedFileChars: 12_500,
   docChars: 1_200,
-  totalChars: 14_000,
+  totalChars: 16_000,
 };
 
 const DOC_PATHS = ["CLAUDE.md", "docs/DOCS_MAP.md", "README.md"];
