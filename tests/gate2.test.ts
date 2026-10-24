@@ -31,6 +31,16 @@ function nodesWith(outcome: MergeOutcome) {
 }
 
 describe("resolveGate2", () => {
+  it("sends the change back to the Developer with the note and discards the branch", async () => {
+    const store = new MemoryStore();
+    const id = await ticketAtGate2(store);
+    const { nodes, calls } = nodesWith({ merged: true, url: "x" });
+    const t = await resolveGate2({ store, nodes }, id, "revise", "Reserve the height");
+    expect(t.status).toBe("patching");
+    expect(calls).toEqual(["discard whatsdown/abc"]);
+    expect((await store.events(id)).at(-1)?.payload.note).toBe("Reserve the height");
+  });
+
   it("merges the QA branch before marking the ticket merged", async () => {
     const store = new MemoryStore();
     const id = await ticketAtGate2(store);

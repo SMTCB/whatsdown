@@ -162,7 +162,13 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
     async develop(ticket) {
       const plan = (await latest(ticket, (e) => (typeof e.payload.plan === "string" ? e.payload.plan : undefined))) ?? "";
       const feedback = await latest(ticket, (e) =>
-        e.fromStatus === "in_qa" && e.toStatus === "patching" && typeof e.payload.summary === "string" ? e.payload.summary : undefined,
+        e.toStatus !== "patching"
+          ? undefined
+          : e.fromStatus === "in_qa" && typeof e.payload.summary === "string"
+            ? e.payload.summary
+            : e.fromStatus === "awaiting_merge" && typeof e.payload.note === "string"
+              ? `The owner reviewed the finished change and sent it back: ${e.payload.note}`
+              : undefined,
       );
       const paths = (await latest(ticket, (e) => (Array.isArray(e.payload.files) ? (e.payload.files as string[]) : undefined))) ?? [];
       const anchors = (await latest(ticket, (e) => (Array.isArray(e.payload.anchors) ? (e.payload.anchors as string[]) : undefined))) ?? [];

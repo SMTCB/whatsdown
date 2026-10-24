@@ -38,7 +38,7 @@ const ALLOWED: Record<TicketStatus, TicketStatus[]> = {
   awaiting_plan_approval: ["diagnosing", "patching", "closed"],
   patching: ["in_qa"],
   in_qa: ["patching", "awaiting_merge"],
-  awaiting_merge: ["merged", "closed"],
+  awaiting_merge: ["merged", "patching", "closed"],
   merged: ["notified"],
   notified: ["closed"],
   closed: ["new"], // owner can reopen

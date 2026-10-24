@@ -5,6 +5,7 @@ import { excerptAround, outline } from "@/lib/code/search";
 import type { CodeFile } from "@/lib/code/locate";
 import { checkDiff, type ChangedFile, type GuardPolicy, type GuardViolation } from "@/lib/guard/diff-guard";
 import { runStructured, type TaskContext } from "@/lib/llm/client";
+import { reviewPatch } from "./review-patch";
 import type { Sandbox } from "@/lib/sandbox/sandbox";
 
 const path = z.string().min(1).max(300);
@@ -113,8 +114,10 @@ export async function develop(
   original: readonly CodeFile[] = [],
   /** Functions or snippets the plan will change; the prompt shows the part of each file around them. */
   anchors: readonly string[] = [],
+  /** Set on the second pass, after the patch review found problems: do not review and retry again. */
+  reviewed = false,
 ): Promise<DevelopResult> {
-  const retry = feedback ? `\n\nThe previous attempt failed QA:\n<qa_output>${feedback}</qa_output>` : "";
+  const retry = feedback ? `\n\nThe previous attempt was not accepted:\n<qa_output>${feedback}</qa_output>` : "";
   let budget = PROMPT_TOTAL_CHARS;
   const shown = original.map((f) => {
     const room = Math.max(0, Math.min(PROMPT_FILE_CHARS, budget));
@@ -152,6 +155,15 @@ Your previous edits could not be applied: ${applied.error}. Copy "find" exactly 
       files: [],
       violations: guard.violations,
     };
+  }
+  // A second look at what was written, so the owner is not the first to read the diff.
+  const review = data.edits.length > 0 ? await reviewPatch(ctx, ticket, plan, data.edits) : { ok: true, problems: [] as string[] };
+  if (!review.ok && review.problems.length > 0) {
+    if (!reviewed) {
+      const hint = `${feedback ? `${feedback}\n` : ""}A reviewer found problems with your last patch. Fix them:\n- ${review.problems.join("\n- ")}`;
+      return develop(ctx, ticket, plan, sandbox, policy, hint, original, anchors, true);
+    }
+    return { ok: true, summary: `${data.summary} Reviewer concerns: ${review.problems.join("; ")}`.slice(0, 1500), files, violations: [] };
   }
   return { ok: true, summary: data.summary, files, violations: [] };
 }

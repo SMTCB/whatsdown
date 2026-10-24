@@ -17,7 +17,7 @@ export const maxDuration = 300;
 const RUNNING = ["new", "triaged", "diagnosing", "patching", "in_qa", "merged", "notified"];
 
 const GATE1: Gate1Decision[] = ["approve", "revise", "reject"];
-const GATE2: Gate2Decision[] = ["merge", "close"];
+const GATE2: Gate2Decision[] = ["merge", "close", "revise"];
 
 async function gate1(decision: Gate1Decision, formData: FormData) {
   "use server";
@@ -34,9 +34,11 @@ async function gate2(decision: Gate2Decision, formData: FormData) {
   "use server";
   const id = String(formData.get("id"));
   if (!GATE2.includes(decision)) throw new Error("Invalid decision");
+  const note = String(formData.get("note") ?? "").trim() || undefined;
+  if (decision === "revise" && !note) redirect(`/admin/tickets/${id}?blocked=${encodeURIComponent("Say what to change before sending it back.")}`);
   const pipeline = getPipeline();
   try {
-    await resolveGate2(pipeline, id, decision);
+    await resolveGate2(pipeline, id, decision, note);
   } catch (err) {
     if (!(err instanceof MergeBlockedError)) throw err;
     redirect(`/admin/tickets/${id}?blocked=${encodeURIComponent(err.reason)}${err.url ? `&pr=${encodeURIComponent(err.url)}` : ""}`);
@@ -197,7 +199,7 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
       {ticket.status === "awaiting_merge" && (
         <section className="card border-[var(--accent)] border-2">
           <h2 className={h2}>Gate 2: merge?</h2>
-          <p className="hint mb-3">QA passed. Merging applies the change to the project.</p>
+          <p className="hint mb-3">QA passed. Merging applies the change to the project. If the change is not right, send it back with a note and the Developer tries again.</p>
           {blocked && (
             <p role="alert" className="mb-3 text-[0.9375rem]">
               The merge did not go through: {blocked.slice(0, 300)}
@@ -209,10 +211,17 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
               )}
             </p>
           )}
-          <form className="flex flex-wrap gap-2">
+          <form className="flex flex-col gap-3">
             <input type="hidden" name="id" value={ticket.id} />
-            <button formAction={gate2.bind(null, "merge")} className="btn btn-primary">Merge</button>
-            <button formAction={gate2.bind(null, "close")} className="btn">Close without merging</button>
+            <label htmlFor="note2" className="label">
+              Note <span className="font-normal text-[var(--muted)]">(needed to send back: say what to change)</span>
+            </label>
+            <textarea id="note2" name="note" rows={2} className="field" />
+            <div className="flex flex-wrap gap-2">
+              <button formAction={gate2.bind(null, "merge")} className="btn btn-primary">Merge</button>
+              <button formAction={gate2.bind(null, "revise")} className="btn">Send back</button>
+              <button formAction={gate2.bind(null, "close")} className="btn">Close without merging</button>
+            </div>
           </form>
         </section>
       )}

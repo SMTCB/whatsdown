@@ -146,10 +146,10 @@ export class WrongGateError extends Error {
 }
 
 export type Gate1Decision = "approve" | "revise" | "reject";
-export type Gate2Decision = "merge" | "close";
+export type Gate2Decision = "merge" | "close" | "revise";
 
 const GATE1_TARGET: Record<Gate1Decision, TicketStatus> = { approve: "patching", revise: "diagnosing", reject: "closed" };
-const GATE2_TARGET: Record<Gate2Decision, TicketStatus> = { merge: "merged", close: "closed" };
+const GATE2_TARGET: Record<Gate2Decision, TicketStatus> = { merge: "merged", close: "closed", revise: "patching" };
 
 export async function decideGate1(store: TicketStore, ticketId: string, decision: Gate1Decision, note?: string): Promise<Ticket> {
   const t = await store.get(ticketId);
@@ -193,7 +193,7 @@ export async function resolveGate2(deps: PipelineDeps, ticketId: string, decisio
       const out = await nodes.merge(t, branch);
       if (!out.merged) throw new MergeBlockedError(out.reason, out.url);
       extra.pullRequest = out.url;
-    } else if (decision === "close" && nodes.discard) {
+    } else if ((decision === "close" || decision === "revise") && nodes.discard) {
       await nodes.discard(t, branch);
     }
   }

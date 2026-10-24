@@ -10,6 +10,7 @@ import { MemorySandbox } from "@/lib/sandbox/sandbox";
 
 const policy = { protectedPaths: FANTASY_PROTECTED_PATHS, maxChangedLines: 400 };
 const base = { ticketId: "t1", spentUsd: 0, budgetUsd: 1.5 };
+const approved = () => reply(JSON.stringify({ ok: true, problems: [] }));
 const patch = (path: string, content: string) => reply(JSON.stringify({ summary: "Fix it", changes: [{ path, content }] }));
 
 describe("MemorySandbox", () => {
@@ -26,7 +27,7 @@ describe("develop", () => {
 
   it("accepts a clean patch", async () => {
     const sb = new MemorySandbox({ "src/a.ts": "x" });
-    const client = new FakeLlmClient([patch("src/a.ts", "y")]);
+    const client = new FakeLlmClient([patch("src/a.ts", "y"), approved()]);
     const r = await develop({ ...base, client, log: new MemoryUsageLog() }, ticket, "plan", sb, policy);
     expect(r.ok).toBe(true);
     expect(sb.read("src/a.ts")).toBe("y");
@@ -50,7 +51,7 @@ describe("develop", () => {
   });
 
   it("puts QA feedback in the retry prompt and treats the report as untrusted", async () => {
-    const client = new FakeLlmClient([patch("a.ts", "z")]);
+    const client = new FakeLlmClient([patch("a.ts", "z"), approved()]);
     await develop({ ...base, client, log: new MemoryUsageLog() }, ticket, "plan", new MemorySandbox(), policy, "2 tests failed");
     expect(client.requests[0]?.prompt).toContain("2 tests failed");
     expect(client.requests[0]?.system).toContain("untrusted");
@@ -64,7 +65,7 @@ describe("develop with edits", () => {
 
   it("applies a snippet edit to the full original file", async () => {
     const sb = new MemorySandbox({ "src/a.ts": files[0]!.content });
-    const client = new FakeLlmClient([edit("const b = 2;", "const b = 3;")]);
+    const client = new FakeLlmClient([edit("const b = 2;", "const b = 3;"), approved()]);
     const r = await develop({ ...base, client, log: new MemoryUsageLog() }, ticket, "plan", sb, policy, undefined, files);
     expect(r.ok).toBe(true);
     expect(sb.read("src/a.ts")).toBe("const a = 1;\nconst b = 3;\n");
@@ -80,10 +81,10 @@ describe("develop with edits", () => {
   });
 
   it("retries once with the error, and tolerates indentation drift", async () => {
-    const client = new FakeLlmClient([edit("nope", "x"), edit("const a = 1;", "const a = 9;")]);
+    const client = new FakeLlmClient([edit("nope", "x"), edit("const a = 1;", "const a = 9;"), approved()]);
     const r = await develop({ ...base, client, log: new MemoryUsageLog() }, ticket, "plan", new MemorySandbox(), policy, undefined, [{ path: "src/a.ts", content: files[0]!.content }]);
     expect(r.ok).toBe(true);
-    expect(client.requests).toHaveLength(2);
+    expect(client.requests).toHaveLength(3);
     const src = "if (x) {\n    run();\n}\n";
     const loose = applyEdits(new Map([["f", src]]), [{ path: "f", find: "run();", replace: "stop();" }]);
     expect("files" in loose && loose.files.get("f")).toContain("stop();");
@@ -157,5 +158,28 @@ describe("full pipeline with real agents on a fake model", () => {
     await decideGate1(store, t.id, "approve");
     const out = await advance({ store, nodes }, t.id);
     expect(out.status).toBe("failed");
+  });
+});
+
+describe("develop patch review", () => {
+  const ticket = { title: "Crash", body: "It crashes" };
+  const edit = (replace: string) => reply(JSON.stringify({ summary: "Fix", edits: [{ path: "src/a.ts", find: "const a = 1;", replace }] }));
+  const files = [{ path: "src/a.ts", content: "const a = 1;\n" }];
+
+  it("sends the reviewer's problems back to the Developer once and keeps the better patch", async () => {
+    const bad = reply(JSON.stringify({ ok: false, problems: ["WORKS: the empty div has zero height"] }));
+    const client = new FakeLlmClient([edit("const a = '';"), bad, edit("const a = ' ';"), approved()]);
+    const r = await develop({ ...base, client, log: new MemoryUsageLog() }, ticket, "plan", new MemorySandbox(), policy, undefined, files);
+    expect(r.ok).toBe(true);
+    expect(r.summary).not.toContain("Reviewer concerns");
+    expect(client.requests.at(-2)?.prompt).toContain("WORKS: the empty div has zero height");
+  });
+
+  it("passes unresolved concerns on in the summary instead of looping", async () => {
+    const bad = reply(JSON.stringify({ ok: false, problems: ["KEEPS: the Live label is gone"] }));
+    const client = new FakeLlmClient([edit("a"), bad, edit("b"), bad]);
+    const r = await develop({ ...base, client, log: new MemoryUsageLog() }, ticket, "plan", new MemorySandbox(), policy, undefined, files);
+    expect(r.ok).toBe(true);
+    expect(r.summary).toContain("Reviewer concerns: KEEPS: the Live label is gone");
   });
 });
