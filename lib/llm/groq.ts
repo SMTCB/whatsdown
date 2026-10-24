@@ -51,6 +51,8 @@ export class GroqClient implements LlmClient {
       // Prompt Guard rejects a system message; an empty system string means "none".
       messages: [...(req.system ? [{ role: "system", content: req.system }] : []), { role: "user", content: userContent(req) }],
     };
+    // Same report, same plan: repeatable output makes review results comparable between runs.
+    body.temperature = 0;
     if (req.images?.length) body.max_completion_tokens = MAX_VISION_TOKENS;
     if (req.model.startsWith("openai/gpt-oss")) {
       if (req.effort) body.reasoning_effort = req.effort;
