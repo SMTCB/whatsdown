@@ -27,6 +27,13 @@ export interface DevelopResult {
   summary: string;
   files: ChangedFile[];
   violations: GuardViolation[];
+  /** The snippets replaced, for showing the owner what changed at Gate 2. */
+  changes?: { path: string; before: string; after: string }[];
+}
+
+/** Before/after of each edit, cut short so the event stays small. */
+function shownChanges(edits: readonly { path: string; find: string; replace: string }[]) {
+  return edits.slice(0, 8).map((e) => ({ path: e.path, before: e.find.slice(0, 800), after: e.replace.slice(0, 800) }));
 }
 
 const SYSTEM = `You are a careful developer making the smallest change that fixes a problem.
@@ -163,7 +170,7 @@ Your previous edits could not be applied: ${applied.error}. Copy "find" exactly 
       const hint = `${feedback ? `${feedback}\n` : ""}A reviewer found problems with your last patch. Fix them:\n- ${review.problems.join("\n- ")}`;
       return develop(ctx, ticket, plan, sandbox, policy, hint, original, anchors, true);
     }
-    return { ok: true, summary: `${data.summary} Reviewer concerns: ${review.problems.join("; ")}`.slice(0, 1500), files, violations: [] };
+    return { ok: true, summary: `${data.summary} Reviewer concerns: ${review.problems.join("; ")}`.slice(0, 1500), files, violations: [], changes: shownChanges(data.edits) };
   }
-  return { ok: true, summary: data.summary, files, violations: [] };
+  return { ok: true, summary: data.summary, files, violations: [], changes: shownChanges(data.edits) };
 }

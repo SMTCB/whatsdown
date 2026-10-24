@@ -179,7 +179,7 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
         if (content !== null) original.push({ path, content });
       }
       const r = await develop(await ctxFor(ticket), ticket, plan, deps.sandbox, deps.policy, feedback, original, anchors);
-      return { ok: r.ok, summary: r.summary };
+      return { ok: r.ok, summary: r.summary, ...(r.changes?.length ? { changes: r.changes } : {}) };
     },
 
     async qa(ticket) {

@@ -69,6 +69,7 @@ describe("develop with edits", () => {
     const r = await develop({ ...base, client, log: new MemoryUsageLog() }, ticket, "plan", sb, policy, undefined, files);
     expect(r.ok).toBe(true);
     expect(sb.read("src/a.ts")).toBe("const a = 1;\nconst b = 3;\n");
+    expect(r.changes).toEqual([{ path: "src/a.ts", before: "const b = 2;", after: "const b = 3;" }]);
   });
 
   it("fails clearly when the snippet is missing or ambiguous", async () => {

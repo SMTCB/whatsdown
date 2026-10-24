@@ -68,6 +68,9 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
   const qa = [...events].reverse().find((e) => e.fromStatus === "in_qa")?.payload.summary as string | undefined;
   const question = [...events].reverse().find((e) => e.toStatus === "needs_info")?.payload.question as string | undefined;
   const checks = [...events].reverse().find((e) => e.fromStatus === "in_qa" && e.payload.checks)?.payload.checks as CheckReport | undefined;
+  const changes = [...events].reverse().find((e) => e.toStatus === "in_qa" && Array.isArray(e.payload.changes))?.payload.changes as
+    | { path: string; before: string; after: string }[]
+    | undefined;
   const error = latest("error");
   const dupId = latest("duplicateOf");
   const dupOf = dupId ? await store.get(dupId) : null;
@@ -200,6 +203,23 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
         <section className="card border-[var(--accent)] border-2">
           <h2 className={h2}>Gate 2: merge?</h2>
           <p className="hint mb-3">QA passed. Merging applies the change to the project. If the change is not right, send it back with a note and the Developer tries again.</p>
+          {changes && changes.length > 0 && (
+            <div className="mb-3 flex flex-col gap-3">
+              <h3 className="font-semibold">What changed</h3>
+              {changes.map((c, i) => (
+                <div key={`${i}-${c.path}`}>
+                  <p className="text-[0.9375rem] font-semibold">{c.path}</p>
+                  <p className="hint mt-1">Before</p>
+                  <pre className="max-h-64 overflow-auto rounded-md bg-[var(--line)] p-3 text-[0.8125rem] whitespace-pre-wrap">{c.before}</pre>
+                  <p className="hint mt-1">After</p>
+                  <pre className="max-h-64 overflow-auto rounded-md bg-[var(--line)] p-3 text-[0.8125rem] whitespace-pre-wrap">{c.after}</pre>
+                </div>
+              ))}
+              <p className="hint">
+                The automated checks (lint, build, browser tests) ran on the whole app but do not test this specific change. Try the steps in the plan on the branch before you merge.
+              </p>
+            </div>
+          )}
           {blocked && (
             <p role="alert" className="mb-3 text-[0.9375rem]">
               The merge did not go through: {blocked.slice(0, 300)}
