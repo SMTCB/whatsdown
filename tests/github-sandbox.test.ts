@@ -1,7 +1,7 @@
 import { generateKeyPairSync, createVerify } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { MemoryCodeSource } from "@/lib/code/source";
-import { appJwt, GitHubActionsSandbox, tidyLog } from "@/lib/sandbox/github-actions";
+import { appJwt, GitHubActionsSandbox, splitStepLogs, tidyLog } from "@/lib/sandbox/github-actions";
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -132,20 +132,38 @@ describe("GitHubActionsSandbox", () => {
   });
 });
 
-describe("failure log", () => {
-  it("returns a cleaned tail of the failing job's log", async () => {
-    const log = "2026-10-24T10:00:00.1234567Z ok line\n2026-10-24T10:00:01.0000000Z \u001b[31mError: boom\u001b[0m token ghp_abcdefghijklmnop123456\n";
-    const gh = fakeGitHub([[{ status: "completed", conclusion: "failure" }]], { jobs: [{ id: 7, name: "checks", conclusion: "failure", steps: [{ name: "npm test", conclusion: "failure" }] }] }, log);
+describe("step logs", () => {
+  const log = [
+    "2026-10-24T10:00:00.1Z ##[group]Run npm run lint",
+    "2026-10-24T10:00:00.2Z npm run lint",
+    "2026-10-24T10:00:00.3Z ##[endgroup]",
+    "2026-10-24T10:00:01.0Z \u001b[31m3 warnings\u001b[0m token ghp_abcdefghijklmnop123456",
+    "2026-10-24T10:00:02.0Z ##[group]Run npm run build",
+    "2026-10-24T10:00:02.1Z ##[endgroup]",
+    "2026-10-24T10:00:03.0Z ##[error]Build failed",
+  ].join("\n");
+
+  it("splits a job log per step, cleaned of timestamps and keys", () => {
+    const out = splitStepLogs(log, ["Run npm run lint", "Run npm run build"]);
+    expect(out.get("Run npm run lint")).toBe("npm run lint\n3 warnings token [hidden]");
+    expect(out.get("Run npm run build")).toBe("error: Build failed");
+  });
+
+  it("puts each step's log and the list of checks that ran into the report", async () => {
+    const jobs = { jobs: [{ id: 7, name: "checks", conclusion: "failure", steps: [{ name: "Set up job", conclusion: "success" }, { name: "Run npm run lint", conclusion: "success" }, { name: "Run npm run build", conclusion: "failure" }] }] };
+    const gh = fakeGitHub([[{ status: "completed", conclusion: "failure" }]], jobs, log);
     const sb = make(gh);
     await sb.apply([{ path: "a.js", content: "x" }]);
     const res = await sb.runChecks();
-    expect(res.report?.logTail).toBe("ok line\nError: boom token [hidden]");
+    const steps = res.report!.jobs[0]!.steps;
+    expect(steps.map((s) => !!s.log)).toEqual([false, true, true]);
+    expect(res.output).toContain("Steps run: npm run lint; npm run build.");
   });
 
   it("keeps only the last lines", () => {
     const many = Array.from({ length: 100 }, (_, i) => `line ${i}`).join("\n");
     const out = tidyLog(many).split("\n");
-    expect(out).toHaveLength(40);
+    expect(out).toHaveLength(25);
     expect(out.at(-1)).toBe("line 99");
   });
 });

@@ -27,22 +27,56 @@ export interface ActionsOptions {
 const API = "https://api.github.com";
 const BRANCH_PREFIX = "whatsdown/";
 
-const LOG_TAIL_LINES = 40;
-const LOG_TAIL_CHARS = 3_000;
+const STEP_LOG_LINES = 25;
+const STEP_LOG_CHARS = 1_500;
+const FAILED_LOG_LINES = 60;
+const FAILED_LOG_CHARS = 4_000;
 
-/** Last lines of a job log for the owner: no timestamps or colour codes, and nothing that looks like a key or token. */
-export function tidyLog(raw: string): string {
+/** One log line for the owner: no timestamp or colour codes, and nothing that looks like a key or token. */
+function tidyLine(l: string): string {
+  return l
+    .replace(/^\uFEFF?\d{4}-\d\d-\d\dT[\d:.]+Z\s?/, "")
+    .replace(/\u001b\[[0-9;]*m/g, "")
+    .replace(/\b(?:gh[pousr]_|github_pat_|gsk_|sk-)[A-Za-z0-9_-]{8,}/g, "[hidden]")
+    .replace(/(Bearer|token)\s+[A-Za-z0-9._~+/=-]{12,}/gi, "$1 [hidden]");
+}
+
+/** Last lines of a log, cleaned. */
+export function tidyLog(raw: string, maxLines = STEP_LOG_LINES, maxChars = STEP_LOG_CHARS): string {
   const lines = raw
     .split(/\r?\n/)
-    .map((l) =>
-      l
-        .replace(/^\uFEFF?\d{4}-\d\d-\d\dT[\d:.]+Z\s?/, "")
-        .replace(/\u001b\[[0-9;]*m/g, "")
-        .replace(/\b(?:gh[pousr]_|github_pat_|gsk_|sk-)[A-Za-z0-9_-]{8,}/g, "[hidden]")
-        .replace(/(Bearer|token)\s+[A-Za-z0-9._~+/=-]{12,}/gi, "$1 [hidden]"),
-    )
+    .map(tidyLine)
     .filter((l) => l.trim() !== "");
-  return lines.slice(-LOG_TAIL_LINES).join("\n").slice(-LOG_TAIL_CHARS);
+  return lines.slice(-maxLines).join("\n").slice(-maxChars);
+}
+
+/**
+ * GitHub returns one log per job; each step starts at a "##[group]<step name>" line.
+ * Returns the cleaned text that follows each named step, keyed by step name.
+ */
+export function splitStepLogs(raw: string, stepNames: readonly string[], failed: ReadonlySet<string> = new Set()): Map<string, string> {
+  const names = new Set(stepNames);
+  const sections = new Map<string, string[]>();
+  let current: string[] | undefined;
+  for (const line of raw.split(/\r?\n/).map(tidyLine)) {
+    if (line.startsWith("##[endgroup]")) continue;
+    if (line.startsWith("##[group]")) {
+      const title = line.slice("##[group]".length);
+      if (names.has(title) && !sections.has(title)) {
+        current = [];
+        sections.set(title, current);
+      }
+      continue;
+    }
+    if (current && line.trim() !== "") current.push(line.replace(/^##\[(error|warning|notice)\]/, "$1: "));
+  }
+  const out = new Map<string, string>();
+  for (const [name, lines] of sections) {
+    const big = failed.has(name);
+    const text = lines.slice(-(big ? FAILED_LOG_LINES : STEP_LOG_LINES)).join("\n").slice(-(big ? FAILED_LOG_CHARS : STEP_LOG_CHARS));
+    if (text) out.set(name, text);
+  }
+  return out;
 }
 
 const b64url = (data: string | Buffer) => Buffer.from(data).toString("base64url");
@@ -248,15 +282,14 @@ export class GitHubActionsSandbox implements Sandbox, Publisher {
     return undefined;
   }
 
-  /** GitHub answers with a redirect to the log download; any failure just means no tail is shown. */
-  private async logTail(jobId: number): Promise<string | undefined> {
+  /** GitHub answers with a redirect to the log download; any failure just means no log is shown. */
+  private async jobLog(jobId: number): Promise<string | undefined> {
     try {
       const res = await this.fetchFn(`${API}/repos/${this.target.owner}/${this.target.repo}/actions/jobs/${jobId}/logs`, {
         method: "GET",
         headers: { Authorization: `Bearer ${await this.auth.token()}`, Accept: "application/vnd.github+json", "User-Agent": "whatsdown" },
       });
-      if (!res.ok) return undefined;
-      return tidyLog(await res.text()) || undefined;
+      return res.ok ? await res.text() : undefined;
     } catch {
       return undefined;
     }
@@ -269,21 +302,25 @@ export class GitHubActionsSandbox implements Sandbox, Publisher {
     const jobs = passed
       ? ((await this.call("GET", `/actions/runs/${run.id}/jobs`).catch(() => undefined)) as ApiJobs | undefined)
       : ((await this.call("GET", `/actions/runs/${run.id}/jobs`)) as ApiJobs);
-    const failed = passed ? undefined : jobs?.jobs.find((j) => j.conclusion !== "success" && j.conclusion !== "skipped");
-    const logTail = failed?.id ? await this.logTail(failed.id) : undefined;
-    const report: CheckReport = {
-      url: run.html_url,
-      ...(logTail ? { logTail } : {}),
-      jobs: (jobs?.jobs ?? []).map((j) => ({
+    const report: CheckReport = { url: run.html_url, jobs: [] };
+    for (const j of jobs?.jobs ?? []) {
+      const steps = j.steps ?? [];
+      const raw = j.id ? await this.jobLog(j.id) : undefined;
+      const failedNames = new Set(steps.filter((s) => s.conclusion === "failure").map((s) => s.name));
+      const logs = raw ? splitStepLogs(raw, steps.map((s) => s.name), failedNames) : new Map<string, string>();
+      report.jobs.push({
         name: j.name,
         conclusion: j.conclusion ?? "unfinished",
-        steps: (j.steps ?? []).map((s) => ({ name: s.name, conclusion: s.conclusion ?? "unfinished" })),
-      })),
-    };
-    if (passed) return { passed: true, output: `All checks passed on branch ${this.branch}. ${run.html_url}`, report };
+        steps: steps.map((s) => ({ name: s.name, conclusion: s.conclusion ?? "unfinished", ...(logs.has(s.name) ? { log: logs.get(s.name)! } : {}) })),
+      });
+    }
+    // Names of the project's own checks (not GitHub's setup and cleanup), so the summary says exactly what ran.
+    const ran = report.jobs.flatMap((j) => j.steps).filter((s) => !/^(Set up job|Complete job|Post |Run actions\/)/.test(s.name)).map((s) => s.name.replace(/^Run /, ""));
+    const ranText = ran.length > 0 ? ` Steps run: ${ran.join("; ")}.` : "";
+    if (passed) return { passed: true, output: `All checks passed on branch ${this.branch}.${ranText} ${run.html_url}`, report };
     const failures = (jobs?.jobs ?? [])
       .filter((j) => j.conclusion !== "success" && j.conclusion !== "skipped")
       .map((j) => `${j.name}: failed at "${j.steps?.find((s) => s.conclusion === "failure")?.name ?? "unknown step"}"`);
-    return { passed: false, output: `Checks ${run.conclusion ?? "did not finish"}. ${failures.join("; ")} ${run.html_url}`.trim(), report };
+    return { passed: false, output: `Checks ${run.conclusion ?? "did not finish"}. ${failures.join("; ")}${ranText} ${run.html_url}`.trim(), report };
   }
 }

@@ -149,21 +149,27 @@ export default async function TicketPage({ params, searchParams }: { params: Pro
                     </p>
                     <ul className="mt-1 text-[0.9375rem]">
                       {j.steps.map((s, i) => (
-                        <li key={`${i}-${s.name}`} className="flex justify-between gap-4 py-0.5">
-                          <span>{s.name}</span>
-                          <span className={s.conclusion === "failure" ? "font-semibold" : "text-[var(--muted)]"}>{outcome(s.conclusion)}</span>
+                        <li key={`${i}-${s.name}`} className="py-0.5">
+                          {s.log ? (
+                            <details open={s.conclusion === "failure"}>
+                              <summary className="flex cursor-pointer justify-between gap-4">
+                                <span>{s.name}</span>
+                                <span className={s.conclusion === "failure" ? "font-semibold" : "text-[var(--muted)]"}>{outcome(s.conclusion)}</span>
+                              </summary>
+                              <pre className="mt-1 max-h-96 overflow-auto rounded-md bg-[var(--line)] p-3 text-[0.8125rem] whitespace-pre-wrap">{s.log}</pre>
+                            </details>
+                          ) : (
+                            <div className="flex justify-between gap-4">
+                              <span>{s.name}</span>
+                              <span className={s.conclusion === "failure" ? "font-semibold" : "text-[var(--muted)]"}>{outcome(s.conclusion)}</span>
+                            </div>
+                          )}
                         </li>
                       ))}
                     </ul>
                   </div>
                 ))}
               </div>
-              {checks.logTail && (
-                <>
-                  <p className="mt-3 font-semibold">End of the failing step&apos;s log</p>
-                  <pre className="mt-1 max-h-96 overflow-auto rounded-md bg-[var(--line)] p-3 text-[0.8125rem] whitespace-pre-wrap">{checks.logTail}</pre>
-                </>
-              )}
             </details>
           )}
         </section>
