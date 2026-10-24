@@ -61,7 +61,14 @@ describe("runStructured", () => {
   });
 
   it("rejects non-JSON and schema mismatches", async () => {
-    await expect(runStructured(ctx(new FakeLlmClient([reply("nope")])), "triage", "s", "p", schema)).rejects.toBeInstanceOf(InvalidModelOutputError);
+    await expect(runStructured(ctx(new FakeLlmClient([reply("nope"), reply("still no")])), "triage", "s", "p", schema)).rejects.toBeInstanceOf(InvalidModelOutputError);
     await expect(runStructured(ctx(new FakeLlmClient([reply('{"n":"x"}')])), "triage", "s", "p", schema)).rejects.toBeInstanceOf(InvalidModelOutputError);
+  });
+
+  it("finds the object inside prose, and asks again once when the reply is cut off", async () => {
+    expect((await runStructured(ctx(new FakeLlmClient([reply('Here you go: {"n": 4} done')])), "triage", "s", "p", schema)).data).toEqual({ n: 4 });
+    const client = new FakeLlmClient([reply('{"n": 5, "text": "cut of'), reply('{"n": 5}')]);
+    expect((await runStructured(ctx(client), "triage", "s", "p", schema)).data).toEqual({ n: 5 });
+    expect(client.requests[1]?.prompt).toContain("not valid JSON");
   });
 });

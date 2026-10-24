@@ -109,6 +109,23 @@ export class InvalidModelOutputError extends Error {
   }
 }
 
+/** Parses a reply as JSON, ignoring a code fence or prose around the object. Undefined when there is none. */
+function parseJson(text: string): unknown {
+  const raw = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const candidates = [raw];
+  const first = raw.indexOf("{");
+  const last = raw.lastIndexOf("}");
+  if (first > 0 && last > first) candidates.push(raw.slice(first, last + 1));
+  for (const c of candidates) {
+    try {
+      return JSON.parse(c);
+    } catch {
+      // try the next form
+    }
+  }
+  return undefined;
+}
+
 /** Like runTask, but parses the reply as JSON and validates it. Tolerates a ```json fence. */
 export async function runStructured<S extends z.ZodType>(
   ctx: TaskContext,
@@ -117,13 +134,13 @@ export async function runStructured<S extends z.ZodType>(
   prompt: string,
   schema: S,
 ): Promise<{ data: z.infer<S>; model: ModelId; costUsd: number }> {
-  const res = await runTask(ctx, task, system, prompt);
-  const raw = res.text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  let json: unknown;
-  try {
-    json = JSON.parse(raw);
-  } catch {
-    throw new InvalidModelOutputError(`${task}: reply was not valid JSON`);
+  let res = await runTask(ctx, task, system, prompt);
+  let json = parseJson(res.text);
+  if (json === undefined) {
+    // Long answers can be cut off or wrapped in prose; ask once more, shorter.
+    res = await runTask(ctx, task, system, `${prompt}\n\nYour previous reply was not valid JSON (it may have been cut off). Reply again with the JSON object only, keeping every text field short.`);
+    json = parseJson(res.text);
+    if (json === undefined) throw new InvalidModelOutputError(`${task}: reply was not valid JSON`);
   }
   const parsed = schema.safeParse(json);
   if (!parsed.success) throw new InvalidModelOutputError(`${task}: ${parsed.error.issues[0]?.message ?? "schema mismatch"}`);
