@@ -1,5 +1,6 @@
 import { unusedFiles } from "@/lib/code/imports";
 import { checkQuotes, type Quote } from "@/lib/code/evidence";
+import { reviewPlan } from "@/lib/agents/review-plan";
 import { locate, LOCATE_LIMITS } from "@/lib/code/locate";
 import type { CodeSource } from "@/lib/code/source";
 import { communicate } from "@/lib/agents/communicator";
@@ -110,6 +111,24 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
           if (r.located) proof = await checkQuotes(read, r.evidence);
         }
       }
+      // A second look with a fixed checklist (cause, every branch kept, least change, scope), so the owner is not the first reviewer.
+      let concerns: string[] = [];
+      if (shown && r.located) {
+        let review = await reviewPlan(await ctxFor(ticket), ticket, r, shown);
+        if (!review.ok && review.problems.length > 0) {
+          const hint = `A reviewer found problems with your last plan. Fix them in the new plan:\n- ${review.problems.join("\n- ")}`;
+          const again = await diagnose(await ctxFor(ticket), ticket, t, note, shown, hint);
+          if (again.located) {
+            const second = await checkQuotes((p) => deps.code!.read(p), again.evidence);
+            if (second.verified.length > 0) {
+              r = again;
+              proof = second;
+              review = await reviewPlan(await ctxFor(ticket), ticket, r, shown);
+            }
+          }
+        }
+        if (!review.ok) concerns = review.problems;
+      }
       if (!r.located) {
         // Say so rather than edit a file that merely looks related.
         const looked = r.trace ? `\n\nWhat I looked for: ${r.trace}` : "";
@@ -130,6 +149,7 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
           : "",
         offScreen ? `Check: the text on your screen was found in ${hitFiles.join(", ")}, but this plan changes other files. Make sure it is the right place.` : "",
         r.plan,
+        concerns.length ? `Reviewer concerns (check before approving):\n- ${concerns.join("\n- ")}` : "",
         r.trace ? `How I found it: ${r.trace}` : "",
         evidence ? `Code this is based on (checked against the file):\n${evidence}` : "",
         `Files to change: ${picked.files.join(", ") || "unknown"}`,

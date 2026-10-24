@@ -15,7 +15,7 @@ export const diagnoseSchema = z.object({
   /** Function names or exact snippets in the files that the fix will change, so the Developer sees that part of the file. */
   anchors: z.array(z.string().max(120)).max(5).default([]),
   /** Lines copied from the code shown that cause the problem; the platform checks each one exists in its file. */
-  evidence: z.array(z.object({ path: z.string().max(200), quote: z.string().min(1).transform((q) => q.slice(0, 600)) })).max(4).default([]),
+  evidence: z.array(z.object({ path: z.string().max(200), quote: z.string().min(1).transform((q) => q.slice(0, 1500)) })).max(4).default([]),
 });
 
 export type DiagnoseResult = z.infer<typeof diagnoseSchema>;
@@ -27,7 +27,7 @@ Base the plan on the code shown; name the files that must change. Never guess a 
 Show your trace: "trace" says which text from the screen you looked for and which file and function holds it (copy names from the code). Prefer files that contain the on-screen text over files that only have a similar name.
 If the code shown does not contain the place that must change, set "located" to false, leave "suspectedFiles" empty and say in the plan what is missing. Do not propose a change to a nearby file instead.
 "anchors" are the function names or exact lines you will change, so the developer can see them.
-"evidence" proves the cause: copy one to four lines of code, character for character from the code shown, that produce the problem (for example the lines that add the extra text or set the size). The plan must explain how those lines cause what the reporter sees. A quote that is not in the file is rejected, so never paraphrase or invent one.
+"evidence" proves the cause: copy one to four blocks of code, whole if-else or ternary blocks rather than half of one,, character for character from the code shown, that produce the problem (for example the lines that add the extra text or set the size). The plan must explain how those lines cause what the reporter sees. A quote that is not in the file is rejected, so never paraphrase or invent one.
 Propose the smallest safe fix as a short plan a non-technical owner can approve: what is wrong, what will change, how it will be tested.
 Reply with JSON only: {"plan":"plain-language plan","suspectedFiles":["path"],"risk":"low|medium|high","trace":"searched X, found in file Y function Z","located":true,"anchors":["name"],"evidence":[{"path":"file","quote":"exact code lines"}]}.`;
 

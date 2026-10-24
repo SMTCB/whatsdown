@@ -90,6 +90,7 @@ describe("agent nodes with a code source", () => {
     const client = new FakeLlmClient([
       reply(JSON.stringify({ files: ["src/scores.js"] })),
       reply(JSON.stringify({ plan: "Fix score", suspectedFiles: ["src/scores.js"], risk: "low", evidence: [{ path: "src/scores.js", quote: "export const score = () => 0;" }] })),
+      reply(JSON.stringify({ ok: true, problems: [] })),
     ]);
     const nodes = createAgentNodes({
       store,

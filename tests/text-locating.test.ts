@@ -117,10 +117,10 @@ describe("locate by on-screen text", () => {
 });
 
 describe("diagnose and develop with a trace", () => {
-  const nodesFor = async (replies: ReturnType<typeof reply>[]) => {
+  const nodesFor = async (replies: ReturnType<typeof reply>[], review?: ReturnType<typeof reply>) => {
     const store = new MemoryStore();
     const t = await store.create({ projectId: "p", title: ticket.title, body: ticket.body, channel: "web" });
-    const client = new FakeLlmClient(replies);
+    const client = new FakeLlmClient([...replies, review ?? reply(JSON.stringify({ ok: true, problems: [] }))]);
     const nodes = createAgentNodes({
       store,
       client,
@@ -167,7 +167,7 @@ describe("diagnose and develop with a trace", () => {
       guess([{ path: "src/components/league/RecapView.jsx", quote: "return <h2>Matchday   scores</h2>;" }]),
     ]);
     const r = await nodes.diagnose(t);
-    expect(client.requests).toHaveLength(3);
+    expect(client.requests).toHaveLength(4);
     expect(client.requests[2]?.prompt).toContain("gave no evidence that could be found");
     expect(r.plan).not.toContain("Not verified");
     expect(r.plan).toContain("return <h2>Matchday   scores</h2>;");
@@ -201,7 +201,7 @@ describe("diagnose and develop with a trace", () => {
       guess([{ path: "src/components/league/RecapView.jsx", quote: "return <tr>{r.points}</tr>;" }]),
     ]);
     const r = await nodes.diagnose(t);
-    expect(client.requests.at(-1)?.prompt).toContain("said the code was not shown");
+    expect(client.requests.at(-2)?.prompt).toContain("said the code was not shown");
     expect(r.plan).not.toContain("I could not find");
     expect(r.files).toEqual(["src/components/league/RecapView.jsx"]);
   });
@@ -213,6 +213,22 @@ describe("diagnose and develop with a trace", () => {
     ]);
     const r = await nodes.diagnose(t);
     expect(r.plan).toContain("Check: the text on your screen was found in src/components/league/RecapView.jsx, src/main.jsx");
+  });
+
+  it("asks for a better plan once when the reviewer finds a problem, and shows what is still open", async () => {
+    const problem = reply(JSON.stringify({ ok: false, problems: ["Drops the live state"] }));
+    const { nodes, t, client } = await nodesFor(
+      [
+        reply(JSON.stringify({ files: [] })),
+        guess([{ path: "src/components/league/RecapView.jsx", quote: "return <tr>{r.points}</tr>;" }]),
+        problem,
+        guess([{ path: "src/components/league/RecapView.jsx", quote: "return <tr>{r.points}</tr>;" }]),
+      ],
+      problem,
+    );
+    const r = await nodes.diagnose(t);
+    expect(client.requests[3]?.prompt).toContain("Drops the live state");
+    expect(r.plan).toContain("Reviewer concerns (check before approving):\n- Drops the live state");
   });
 
   it("develop fails clearly, without asking the model, when the plan names no file", async () => {
