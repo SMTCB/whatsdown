@@ -4,6 +4,7 @@ import { RateLimitError, type LlmClient, type LlmRequest, type LlmResponse } fro
 /** Longest Retry-After (seconds) worth waiting for. */
 const MAX_RETRY_WAIT_S = 30;
 const MAX_COMPLETION_TOKENS = 3_500;
+const MAX_VISION_TOKENS = 1_200;
 const ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 
 type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<Pick<Response, "ok" | "status" | "json" | "text"> & { headers?: Pick<Headers, "get"> }>;
@@ -16,6 +17,15 @@ export class LlmProviderError extends Error {
     super(message);
     this.name = "LlmProviderError";
   }
+}
+
+/** Plain text, or text plus pictures as data URLs (OpenAI-compatible vision format). */
+function userContent(req: LlmRequest) {
+  if (!req.images?.length) return req.prompt;
+  return [
+    { type: "text", text: req.prompt },
+    ...req.images.map((i) => ({ type: "image_url", image_url: { url: `data:${i.mime};base64,${Buffer.from(i.bytes).toString("base64")}` } })),
+  ];
 }
 
 interface ChatReply {
@@ -39,8 +49,9 @@ export class GroqClient implements LlmClient {
     const body: Record<string, unknown> = {
       model: req.model,
       // Prompt Guard rejects a system message; an empty system string means "none".
-      messages: [...(req.system ? [{ role: "system", content: req.system }] : []), { role: "user", content: req.prompt }],
+      messages: [...(req.system ? [{ role: "system", content: req.system }] : []), { role: "user", content: userContent(req) }],
     };
+    if (req.images?.length) body.max_completion_tokens = MAX_VISION_TOKENS;
     if (req.model.startsWith("openai/gpt-oss")) {
       if (req.effort) body.reasoning_effort = req.effort;
       // Reasoning tokens count against this cap; Groq also counts it toward the per-minute limit.

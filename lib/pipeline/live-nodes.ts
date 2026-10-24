@@ -1,5 +1,6 @@
 import { FANTASY_PROTECTED_PATHS } from "@/lib/guard/diff-guard";
 import type { CodeSource } from "@/lib/code/source";
+import type { AttachmentStore } from "@/lib/attachments/store";
 import type { TicketStore } from "@/lib/db/store";
 import type { LlmClient, UsageLog } from "@/lib/llm/client";
 import { MemorySandbox, type Publisher, type Sandbox } from "@/lib/sandbox/sandbox";
@@ -12,6 +13,8 @@ export interface LiveDeps {
   client: LlmClient;
   log: UsageLog;
   budgetUsd: number;
+  /** Uploaded files; lets the pipeline read attached screenshots. */
+  attachments?: AttachmentStore;
   code: CodeSource;
   /** A real cloud sandbox. Without one, Developer and QA stay placeholders. */
   sandbox?: Sandbox;
@@ -29,7 +32,7 @@ export function liveNodes(deps: LiveDeps): PipelineNodes {
     sandbox: deps.sandbox ?? new MemorySandbox(),
     policy: { protectedPaths: FANTASY_PROTECTED_PATHS, maxChangedLines: 400 },
   });
-  const nodes = { ...demoNodes, triage: real.triage, diagnose: real.diagnose };
+  const nodes = { ...demoNodes, triage: real.triage, diagnose: real.diagnose, ...(deps.attachments ? { readImages: real.readImages } : {}) };
   if (!deps.sandbox) return nodes;
   const withSandbox = { ...nodes, develop: real.develop, qa: real.qa };
   return deps.publisher ? { ...withSandbox, merge: real.merge, discard: real.discard } : withSandbox;

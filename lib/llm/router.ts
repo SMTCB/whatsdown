@@ -3,6 +3,7 @@ import { MODELS, type ModelId } from "./pricing";
 export type Task =
   | "screen"
   | "transcribe"
+  | "describe_image"
   | "triage"
   | "locate"
   | "diagnose"
@@ -25,6 +26,7 @@ export interface Route {
 export const GROQ_ROUTES: Record<Task, Route> = {
   screen: { primary: "meta-llama/llama-prompt-guard-2-86m" },
   transcribe: { primary: "whisper-large-v3-turbo" },
+  describe_image: { primary: "qwen/qwen3.8-27b" },
   triage: { primary: "openai/gpt-oss-20b", fallback: "openai/gpt-oss-120b", effort: "low" },
   locate: { primary: "openai/gpt-oss-20b", fallback: "openai/gpt-oss-120b", effort: "medium" },
   qa_summary: { primary: "openai/gpt-oss-20b", fallback: "openai/gpt-oss-120b", effort: "low" },

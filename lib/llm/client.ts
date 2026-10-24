@@ -7,6 +7,14 @@ export interface LlmRequest {
   system: string;
   prompt: string;
   effort?: "low" | "medium" | "high";
+  /** Pictures sent with the prompt; only vision models accept them. */
+  images?: LlmImage[];
+}
+
+export interface LlmImage {
+  mime: string;
+  /** Raw bytes of the picture, base64-encoded by the provider client. */
+  bytes: Uint8Array;
 }
 
 export interface LlmResponse {
@@ -74,7 +82,7 @@ export interface TaskResult {
 }
 
 /** Routes the task, enforces the ticket budget, falls back on a rate limit, and logs usage. */
-export async function runTask(ctx: TaskContext, task: Task, system: string, prompt: string): Promise<TaskResult> {
+export async function runTask(ctx: TaskContext, task: Task, system: string, prompt: string, images?: LlmImage[]): Promise<TaskResult> {
   assertWithinBudget(ctx.spentUsd, ctx.budgetUsd);
   const route = routeFor(task, ctx.overrides);
   const candidates = route.fallback ? [route.primary, route.fallback] : [route.primary];
@@ -82,7 +90,7 @@ export async function runTask(ctx: TaskContext, task: Task, system: string, prom
   let lastError: unknown;
   for (const model of candidates) {
     try {
-      const res = await ctx.client.complete({ model, system, prompt, effort: route.effort });
+      const res = await ctx.client.complete({ model, system, prompt, effort: route.effort, ...(images?.length ? { images } : {}) });
       const cost = costUsd(model, res.usage);
       await ctx.log.record({ ticketId: ctx.ticketId, task, model, usage: res.usage, costUsd: cost });
       return { text: res.text, model, costUsd: cost };

@@ -65,7 +65,7 @@ export function ReportForm({ action, needsCode }: { action: (prev: ReportState, 
             className="field cursor-pointer border-dashed bg-[var(--bg)] p-3 file:mr-4 file:min-h-10 file:cursor-pointer file:rounded-md file:border-0 file:bg-[var(--accent)] file:px-4 file:font-semibold file:text-white"
           />
           <p id="files-hint" className="hint">
-            Screenshots, PDFs, Word documents or text logs. Up to {ATTACH_LIMITS.maxFiles} files, {maxMb} MB each. Files are stored with the ticket and are never read by the agents. Documents must be chosen again after an error.
+            Screenshots, PDFs, Word documents or text logs. Up to {ATTACH_LIMITS.maxFiles} files, {maxMb} MB each. Screenshots (PNG or JPEG, up to 3 MB) are read automatically and added to the ticket; PDFs, Word documents and text logs are stored with the ticket but not read yet. Documents must be chosen again after an error.
           </p>
         </div>
         <button type="submit" disabled={pending} className="btn btn-primary self-start">

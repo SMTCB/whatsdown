@@ -1,6 +1,8 @@
 import { locate } from "@/lib/code/locate";
 import type { CodeSource } from "@/lib/code/source";
 import { communicate } from "@/lib/agents/communicator";
+import { describeScreenshot, MAX_IMAGE_BYTES } from "@/lib/agents/describe-image";
+import type { AttachmentStore } from "@/lib/attachments/store";
 import { develop } from "@/lib/agents/develop";
 import { diagnose } from "@/lib/agents/diagnose";
 import { qa } from "@/lib/agents/qa";
@@ -24,6 +26,8 @@ export interface AgentNodeDeps {
   code?: CodeSource;
   /** Lands approved branches on the project; without it the pipeline cannot merge. */
   publisher?: Publisher;
+  /** Uploaded files; with it, attached screenshots are read at intake. */
+  attachments?: AttachmentStore;
   /** Delivers a message to the reporter (web page, WhatsApp). Defaults to doing nothing. */
   send?: (ticket: Ticket, message: string) => Promise<void>;
 }
@@ -59,6 +63,19 @@ export function createAgentNodes(deps: AgentNodeDeps): PipelineNodes {
 
   return {
     triage: async (ticket) => triage(await ctxFor(ticket), ticket),
+
+    async readImages(ticket) {
+      if (!deps.attachments) return undefined;
+      const parts: string[] = [];
+      for (const meta of await deps.attachments.list(ticket.id)) {
+        // Already described on an earlier pass (the reporter replied and the ticket restarted).
+        if (!meta.mime.startsWith("image/") || meta.size > MAX_IMAGE_BYTES || ticket.body.includes(meta.id)) continue;
+        const file = await deps.attachments.get(meta.id);
+        if (!file) continue;
+        parts.push(await describeScreenshot(await ctxFor(ticket), { id: meta.id, name: meta.name, mime: meta.mime, bytes: file.bytes }));
+      }
+      return parts.length > 0 ? parts.join("\n\n") : undefined;
+    },
 
     async diagnose(ticket) {
       const triaged = await latest(ticket, (e) => (e.toStatus === "triaged" ? (e.payload as Partial<TriageResult>) : undefined));

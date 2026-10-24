@@ -12,6 +12,8 @@ import type { ScreenResult, Screener } from "@/lib/guard/screen";
  */
 export interface PipelineNodes {
   triage(ticket: Ticket): Promise<TriageResult>;
+  /** Text read from the ticket's attached screenshots, to add to the ticket before triage. */
+  readImages?(ticket: Ticket): Promise<string | undefined>;
   diagnose(ticket: Ticket): Promise<{ plan: string; files?: string[] }>;
   develop(ticket: Ticket): Promise<{ ok: boolean; summary: string }>;
   qa(ticket: Ticket): Promise<{ passed: boolean; summary: string; branch?: string; checks?: CheckReport }>;
@@ -35,6 +37,22 @@ export interface PipelineDeps {
 const STOP: readonly TicketStatus[] = ["needs_info", "duplicate", "awaiting_plan_approval", "awaiting_merge", "closed", "failed"];
 
 const MAX_STEPS = 25;
+
+/**
+ * Adds what the screenshots show to the ticket text so every agent sees it. A failed read never stops the ticket,
+ * and text the screener blocks is dropped.
+ */
+async function withScreenshots(deps: PipelineDeps, ticket: Ticket): Promise<Ticket> {
+  if (!deps.nodes.readImages) return ticket;
+  try {
+    const text = await deps.nodes.readImages(ticket);
+    if (!text) return ticket;
+    if (deps.screener && (await deps.screener.screen(text)).verdict === "blocked") return ticket;
+    return await deps.store.appendDetails(ticket.id, text);
+  } catch {
+    return ticket;
+  }
+}
 
 export async function advance(deps: PipelineDeps, ticketId: string): Promise<Ticket> {
   const { store, nodes } = deps;
@@ -65,7 +83,8 @@ export async function advance(deps: PipelineDeps, ticketId: string): Promise<Tic
             });
             break;
           }
-          const r = await nodes.triage(ticket);
+          const seen = await withScreenshots(deps, ticket);
+          const r = await nodes.triage(seen);
           const flagged = screen?.verdict === "suspicious" ? { screen } : {};
           if (r.needsInfo) await transition(store, ticketId, "needs_info", "agent", "triage needs more info", { ...r, ...flagged });
           else await transition(store, ticketId, "triaged", "agent", "triage done", { ...r, ...flagged });
