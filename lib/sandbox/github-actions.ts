@@ -146,7 +146,7 @@ export class GitHubActionsSandbox implements Sandbox, Publisher {
     this.now = opts.now ?? Date.now;
     this.auth = opts.auth ?? new GitHubAppAuth(creds, this.fetchFn, this.now);
     this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
-    this.timeoutMs = opts.timeoutMs ?? 10 * 60_000;
+    this.timeoutMs = opts.timeoutMs ?? 15 * 60_000;
     this.pollMs = opts.pollMs ?? 10_000;
   }
 
